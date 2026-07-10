@@ -1,17 +1,49 @@
 # agentic-financial-planner-lab
 
+[![ci](https://github.com/jman4162/agentic-financial-planner-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/jman4162/agentic-financial-planner-lab/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/jman4162/agentic-financial-planner-lab)](LICENSE)
+
 An experimental, provider-neutral framework for building auditable personal-finance planning agents: a typed case file, deterministic calculators, a Monte Carlo simulation adapter, cited research through the Model Context Protocol, and a critic gate that blocks any memo whose numbers cannot be traced to a recorded computation.
+
+**The LLM never does the math.** Every dollar figure in an output memo resolves to a recorded calculator run or a case-file field, and a critic rejects the memo otherwise. This is a research and education project: not a financial advisor, no trade execution, no stock picking, no required account anywhere. Examples use synthetic households only (see the [disclaimer](#license)).
+
+![Demo of validate, calc, and import-cashflow commands](docs/assets/demo.gif)
 
 **Keywords:** financial planning, retirement readiness, Monte Carlo simulation, LLM agents, Model Context Protocol (MCP), funded ratio, safe withdrawal rate, personal finance, FIRE.
 
-The design premise: an LLM is good at asking questions, structuring a case, choosing tools, and explaining trade-offs. It is bad at arithmetic. So this project splits the work:
+## Architecture
 
-- **LLM (via [Strands Agents](https://strandsagents.com/)):** intake, orchestration, tool selection, explanation, memo writing.
-- **Deterministic code:** every simulation, tax calculation, withdrawal rate, funded ratio, and portfolio metric. Seeded, typed, testable.
-- **Case file:** a typed Pydantic model holding household facts, goals, balance sheet, cash flow, portfolio, and labeled assumptions. Every number in an output memo traces back to a case-file input or a calculator result.
-- **Critic stage:** before a memo is emitted, a verifier checks that numbers are traceable, citations are present, assumptions are disclosed, and the output contains no individualized securities advice.
+The LLM appears at exactly two points (memo drafting and a tone review); everything else is deterministic, seeded, and testable.
 
-This is a research and education project. It is not a financial advisor, does not execute trades, does not pick stocks, and does not require any commercial product or account. Examples use synthetic households only.
+```mermaid
+flowchart TD
+    A[Case file: typed household facts] --> B[Assumptions gate:<br/>base / conservative / optimistic,<br/>confirmed by the user]
+    B --> C[Deterministic engines]
+    C --> C1[Calculators:<br/>funded ratio, FI timeline]
+    C --> C2[Monte Carlo simulation]
+    C --> C3[CEFR health metric]
+    C --> C4[Allocation diagnostics]
+    C1 --> D[(Computation ledger:<br/>every result gets a citable id)]
+    C2 --> D
+    C3 --> D
+    C4 --> D
+    E[MCP research source:<br/>search + fetch, recorded] --> D
+    D --> F[Memo writer LLM:<br/>drafts prose, cites only<br/>ids from the ledger menu]
+    F --> G{Critic gate:<br/>9 deterministic checks<br/>+ LLM tone review}
+    G -- approved --> H[Planning memo<br/>+ audit sidecar]
+    G -- rejected twice --> I[Hard failure:<br/>no memo emitted]
+```
+
+## How it compares
+
+| | Spreadsheet / DIY | Web retirement simulators | Generic LLM chat | This project |
+|---|---|---|---|---|
+| Deterministic, seeded math | yes | yes | no | yes |
+| Explains trade-offs in prose | no | limited | yes | yes |
+| Every number traceable to a computation | manual | no | no | enforced by a critic |
+| Cited methodology sources | manual | some | fabrication risk | fetched and verified |
+| Runs fully local | yes | no | rarely | yes (Ollama) |
+| Refuses unverifiable output | n/a | n/a | no | yes |
 
 ## Install
 
@@ -65,6 +97,14 @@ uv run python examples/hello_agent.py
 ```
 
 The memo command writes the markdown memo plus a `.audit.json` sidecar holding the full computation ledger and critic report, so every number can be checked by hand. If the critic rejects the draft twice, no memo is written and the failing checks are printed.
+
+## Case studies
+
+Full walkthroughs with real generated memos, checked in verbatim:
+
+- [An on-track couple, full analysis](docs/case-studies/on-track-couple.md): simulation percentiles, the CEFR health metric, allocation diagnostics, and cited research in one run.
+- [Data gaps and CSV import](docs/case-studies/data-gaps-and-csv-import.md): missing data is disclosed, then partially filled from a transactions export with no LLM involved.
+- [A rejected memo](docs/case-studies/rejected-memo.md): what the critic gate catches, and why the worst case is no memo rather than a wrong one.
 
 ## How a run works
 
