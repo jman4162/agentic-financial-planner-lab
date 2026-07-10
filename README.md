@@ -4,6 +4,7 @@
 [![pypi](https://img.shields.io/pypi/v/planner-lab)](https://pypi.org/project/planner-lab/)
 ![python](https://img.shields.io/pypi/pyversions/planner-lab)
 [![license](https://img.shields.io/github/license/jman4162/agentic-financial-planner-lab)](LICENSE)
+[![DOI](https://zenodo.org/badge/1296005316.svg)](https://doi.org/10.5281/zenodo.21301713)
 
 An experimental, provider-neutral framework for building auditable personal-finance planning agents: a typed case file, deterministic calculators, a Monte Carlo simulation adapter, cited research through the Model Context Protocol, and a critic gate that blocks any memo whose numbers cannot be traced to a recorded computation.
 
@@ -145,6 +146,7 @@ Working retirement-readiness pipeline: case-file schemas, deterministic calculat
   title   = {agentic-financial-planner-lab: an auditable financial planning agent framework},
   year    = {2026},
   url     = {https://github.com/jman4162/agentic-financial-planner-lab},
+  doi     = {10.5281/zenodo.21301713},
   version = {0.1.1},
   license = {MIT}
 }
