@@ -18,15 +18,22 @@ from planner_lab.agents.llm_critic import make_llm_checks
 from planner_lab.agents.memo_writer import write_memo
 from planner_lab.critic import run_critic
 from planner_lab.memo.render import MemoRejectedError
+from planner_lab.protocols import (
+    FinancialHealthMetric,
+    PortfolioAnalyticsEngine,
+    ResearchSource,
+)
 from planner_lab.schemas.assumptions import AssumptionsBundle, default_assumptions
 from planner_lab.schemas.case_file import CaseFile
 from planner_lab.schemas.critic import CriticReport
 from planner_lab.schemas.memo import PlanningMemo
-from planner_lab.schemas.results import ComputationLedger
+from planner_lab.schemas.results import ComputationLedger, ResearchDocument
 
 ConfirmFn = Callable[[str], bool]
 
 _BASE_STRESS_SCENARIOS = ("crash", "sequence_risk")
+_MAX_RESEARCH_DOCS = 2
+_METHODOLOGY_QUERIES = ("safe withdrawal rate",)
 
 
 class AnalysisResult(NamedTuple):
@@ -145,11 +152,100 @@ def _run_simulations(case: CaseFile, ledger: ComputationLedger, *, n_paths: int,
         )
 
 
+def _run_health_metric(
+    case: CaseFile, ledger: ComputationLedger, metric: FinancialHealthMetric
+) -> None:
+    """Compute the health metric under every assumption set (closed-form, cheap)."""
+    assert case.assumptions is not None
+    current_age = case.household.persons[0].age_in(case.created.year)
+    for aset in case.assumptions.all_sets():
+        result = metric.compute(case, aset)
+        ledger.add(
+            "compute_health_metric",
+            {
+                "metric": result.metric_name,
+                "base_inflation": aset.inflation,
+                "planning_horizon": max(aset.plan_end_age - current_age, 1),
+            },
+            {
+                result.metric_name: result.value,
+                **result.components,
+                "interpretation": result.interpretation or "",
+            },
+            assumptions_label=aset.label,
+            adapter=metric.name,
+            kind="metric",
+        )
+
+
+def _run_portfolio_diagnostics(
+    case: CaseFile, ledger: ComputationLedger, engine: PortfolioAnalyticsEngine
+) -> None:
+    """One diagnostic benchmark under the base set only; three alphas would
+    invite the memo to average them."""
+    assert case.assumptions is not None
+    aset = case.assumptions.base
+    diagnostics = engine.analyze(case, aset)
+    ledger.add(
+        "portfolio_diagnostics",
+        {
+            "engine": diagnostics.engine_name,
+            "mu": aset.expected_return_real,
+            "sigma": aset.return_volatility,
+        },
+        {**diagnostics.findings, "notes": diagnostics.notes},
+        assumptions_label=aset.label,
+        adapter=engine.name,
+        kind="portfolio",
+    )
+
+
+def _run_research(
+    case: CaseFile,
+    ledger: ComputationLedger,
+    source: ResearchSource,
+    *,
+    max_docs: int = _MAX_RESEARCH_DOCS,
+) -> list[ResearchDocument]:
+    """Deterministic research plan: search the case question plus fixed
+    methodology queries, fetch the top distinct hits, record everything."""
+    refs: list[str] = []
+    titles: dict[str, str] = {}
+    for query in (case.question, *_METHODOLOGY_QUERIES):
+        hits = source.search(query, limit=5)
+        ledger.add(
+            "search_research",
+            {"query": query, "limit": 5},
+            {"refs": [h.ref for h in hits]},
+            adapter=source.name,
+            kind="research",
+        )
+        for hit in hits[:1]:
+            if hit.ref not in refs:
+                refs.append(hit.ref)
+                titles[hit.ref] = hit.title
+    docs: list[ResearchDocument] = []
+    for ref in refs[:max_docs]:
+        doc = source.fetch(ref)
+        ledger.add(
+            "fetch_research",
+            {"ref": ref},
+            {"ref": doc.ref, "title": doc.title, "url": doc.url or ""},
+            adapter=source.name,
+            kind="research",
+        )
+        docs.append(doc)
+    return docs
+
+
 def run_analysis(
     case: CaseFile,
     *,
     model: Model | None = None,
     simulate: bool = False,
+    research_source: ResearchSource | None = None,
+    health_metric: FinancialHealthMetric | None = None,
+    portfolio_engine: PortfolioAnalyticsEngine | None = None,
     confirm: ConfirmFn | None = None,
     n_paths: int = 2000,
     seed: int = 42,
@@ -173,12 +269,23 @@ def run_analysis(
     _run_calculators(case, ledger)
     if simulate:
         _run_simulations(case, ledger, n_paths=n_paths, seed=seed)
+    if health_metric is not None:
+        _run_health_metric(case, ledger, health_metric)
+    if portfolio_engine is not None:
+        _run_portfolio_diagnostics(case, ledger, portfolio_engine)
+    docs: list[ResearchDocument] = []
+    source_name = "research"
+    if research_source is not None:
+        docs = _run_research(case, ledger, research_source)
+        source_name = research_source.name
 
     llm_checks = make_llm_checks(model)
-    memo = write_memo(case, ledger, model)
+    memo = write_memo(case, ledger, model, research=docs, research_source_name=source_name)
     report = run_critic(memo, ledger, case, llm_checks=llm_checks)
     if not report.approved:
-        memo = write_memo(case, ledger, model, feedback=report)
+        memo = write_memo(
+            case, ledger, model, feedback=report, research=docs, research_source_name=source_name
+        )
         report = run_critic(memo, ledger, case, llm_checks=llm_checks)
         if not report.approved:
             raise MemoRejectedError(report)

@@ -1,0 +1,7 @@
+"Account","Date","Payee","Notes","Category","Amount","Cleared","Reconciled"
+"Checking","2026-01-05","Employer","","Income","1000.00","true","false"
+"Checking","2026-01-10","Coffee","","Food","'-58.12","true","false"
+"Checking","2026-01-10","Coffee","","Food","'-58.12","true","false"
+"Checking","2026-02-08","Mechanic","","Auto","-2000.00","true","false"
+"Checking","2026-02-09","Transfer to Savings","","","-500.00","true","false"
+"Checking","2026-03-02","Employer","","Income","1.00","false","false"

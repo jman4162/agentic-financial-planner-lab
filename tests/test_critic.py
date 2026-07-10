@@ -123,6 +123,29 @@ class TestEachCheckFailsAlone:
         report = run_critic(memo, ledger, case)
         assert failing_ids(report) == {"certainty_not_overstated"}
 
+    def test_diagnostic_framing_flags_imperative_allocation(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        ledger.add(
+            "portfolio_diagnostics",
+            {"engine": "x"},
+            {"alpha_recommended": 0.7},
+            kind="portfolio",
+        )
+        memo = make_memo(case, ledger)
+        memo.risks.append("You should increase your allocation to stocks this year.")
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == {"diagnostic_framing"}
+        assert report.approved  # warning only
+
+    def test_diagnostic_framing_inert_without_portfolio_entries(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        memo.risks.append("You should increase your allocation to stocks this year.")
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == set()
+
     def test_negated_certainty_language_allowed(self) -> None:
         case = make_case()
         ledger = make_ledger(case)

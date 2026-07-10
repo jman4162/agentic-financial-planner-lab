@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from planner_lab.schemas.assumptions import AssumptionSet
-from planner_lab.schemas.case_file import CaseFile, CashFlow
+from planner_lab.schemas.case_file import CaseFile
 from planner_lab.schemas.results import (
+    CashflowImportResult,
     MetricResult,
     PortfolioDiagnostics,
     ResearchDocument,
@@ -54,7 +55,7 @@ class FinancialHealthMetric(Protocol):
 class CashflowImporter(Protocol):
     name: str
 
-    def import_cashflow(self, path: Path) -> CashFlow: ...
+    def import_cashflow(self, path: Path) -> CashflowImportResult: ...
 
 
 @runtime_checkable

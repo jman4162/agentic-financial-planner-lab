@@ -26,8 +26,12 @@ TOOL_NAMES = frozenset(
         "run_simulation",
         "update_case_file",
         "show_case_file",
+        "search_research",
+        "fetch_research",
     }
 )
+
+_RESEARCH_EXCERPT_BUDGET = 4000
 
 
 def build_planner_tools(state: RunState) -> list[Any]:
@@ -162,6 +166,64 @@ def build_planner_tools(state: RunState) -> list[Any]:
         """Return the current case file as JSON."""
         return state.case.model_dump_json(indent=2)
 
+    _source_cell: list[Any] = []
+
+    def _research_source() -> Any:
+        if state.research_url is None:
+            return None
+        if not _source_cell:
+            from planner_lab.adapters import get_research_source
+
+            _source_cell.append(get_research_source(state.research_url))
+        return _source_cell[0]
+
+    @tool
+    def search_research(query: str, limit: int = 5) -> dict[str, Any] | str:
+        """Search the configured research library for educational guides.
+
+        Args:
+            query: Search terms, e.g. the user's planning question.
+            limit: Maximum hits to return.
+        """
+        source = _research_source()
+        if source is None:
+            return "Research is not configured for this session."
+        hits = source.search(query, limit=limit)
+        entry_id = state.ledger.add(
+            "search_research",
+            {"query": query, "limit": limit},
+            {"refs": [h.ref for h in hits]},
+            adapter=source.name,
+            kind="research",
+        )
+        return {"entry_id": entry_id, "results": [h.model_dump() for h in hits]}
+
+    @tool
+    def fetch_research(ref: str) -> dict[str, Any] | str:
+        """Fetch one research guide by its ref (from search_research results).
+
+        Args:
+            ref: The guide ref returned by search_research.
+        """
+        source = _research_source()
+        if source is None:
+            return "Research is not configured for this session."
+        doc = source.fetch(ref)
+        entry_id = state.ledger.add(
+            "fetch_research",
+            {"ref": ref},
+            {"ref": doc.ref, "title": doc.title, "url": doc.url or ""},
+            adapter=source.name,
+            kind="research",
+        )
+        return {
+            "entry_id": entry_id,
+            "ref": doc.ref,
+            "title": doc.title,
+            "url": doc.url,
+            "excerpt": doc.text[:_RESEARCH_EXCERPT_BUDGET],
+        }
+
     return [
         calc_funded_ratio,
         calc_years_to_fi,
@@ -171,4 +233,6 @@ def build_planner_tools(state: RunState) -> list[Any]:
         run_simulation,
         update_case_file,
         show_case_file,
+        search_research,
+        fetch_research,
     ]

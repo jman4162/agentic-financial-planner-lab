@@ -1,6 +1,8 @@
 # agentic-financial-planner-lab
 
-An experimental, provider-neutral framework for building auditable personal-finance planning agents.
+An experimental, provider-neutral framework for building auditable personal-finance planning agents: a typed case file, deterministic calculators, a Monte Carlo simulation adapter, cited research through the Model Context Protocol, and a critic gate that blocks any memo whose numbers cannot be traced to a recorded computation.
+
+**Keywords:** financial planning, retirement readiness, Monte Carlo simulation, LLM agents, Model Context Protocol (MCP), funded ratio, safe withdrawal rate, personal finance, FIRE.
 
 The design premise: an LLM is good at asking questions, structuring a case, choosing tools, and explaining trade-offs. It is bad at arithmetic. So this project splits the work:
 
@@ -43,9 +45,17 @@ With a local [Ollama](https://ollama.com/) server running and a tool-calling-cap
 # Full pipeline: assumptions -> calculators -> memo draft -> critic gate -> memo
 uv run planner-lab memo examples/cases/sample_household.yaml -o memo.md --yes
 
-# Add Monte Carlo simulation (needs the planning extra)
-uv sync --extra agent --extra planning --extra dev
-uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --yes
+# Add Monte Carlo simulation, the fundedness metric, and allocation diagnostics
+uv sync --all-extras
+uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --health --allocation --yes
+
+# Ground the memo's methodology in cited guides from an MCP research server
+PLANNER_LAB_RESEARCH_MCP_URL=https://example.com/mcp \
+  uv run planner-lab memo examples/cases/sample_household.yaml -o memo.md --yes --research
+
+# Derive annual cash flow from a budgeting-app CSV export (no LLM involved)
+uv run planner-lab import-cashflow examples/data/sample_transactions_monarch.csv \
+  --format monarch --case my_case.yaml --write
 
 # Interactive intake chat that builds a case file
 uv run planner-lab intake -o my_case.yaml
@@ -65,9 +75,38 @@ The memo command writes the markdown memo plus a `.audit.json` sidecar holding t
 5. The LLM drafts the memo, citing numbers only from the ledger menu it is given.
 6. The critic runs eight deterministic checks (traceability, no securities advice, disclaimer, assumption disclosure, missing-data disclosure, citation consistency, real/nominal labeling, certainty language) plus an LLM tone review. One revision is attempted; then the run fails.
 
+## Configuration
+
+Everything is configured through environment variables; nothing is hardcoded.
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `PLANNER_LAB_MODEL_PROVIDER` | `ollama` or `bedrock` | `ollama` |
+| `OLLAMA_HOST` / `OLLAMA_MODEL` | Local model server and model id | `http://localhost:11434` / `qwen3` |
+| `PLANNER_LAB_BEDROCK_MODEL` | Bedrock model id (provider `bedrock`) | provider default |
+| `PLANNER_LAB_RESEARCH_MCP_URL` | Streamable-HTTP MCP server exposing `search` and `fetch` tools; enables `--research` | unset |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | OTLP tracing target for `setup_telemetry("otlp")`; `--trace` prints spans to stdout | unset |
+
+Small local models occasionally mis-copy a number or skip a citation; the critic then rejects the memo after one revision attempt rather than emitting it. A larger model (for example `OLLAMA_MODEL=gpt-oss:20b`) makes full runs with simulation, diagnostics, and research more reliable.
+
+Optional extras: `agent` (LLM pipeline, Strands SDK), `planning` (Monte Carlo simulation, fundedness metric), `portfolio` (lifecycle allocation diagnostics), `mcp` (research sources), `dev` (tests, lint, types). The core installs with none of them.
+
 ## Status
 
-Working retirement-readiness pipeline: case-file schemas, deterministic calculators, critic gate, memo renderer, interactive intake, and an optional Monte Carlo adapter. Not yet built: research/citation sources, financial-health metrics, portfolio analytics, cash-flow import. See `CLAUDE.md` for architecture rules.
+Working retirement-readiness pipeline: case-file schemas, deterministic calculators, critic gate, memo renderer, interactive intake, Monte Carlo simulation, certainty-equivalent funded ratio (CEFR) metric, lifecycle allocation diagnostics, MCP research citations, and CSV cash-flow import. See `CLAUDE.md` for architecture rules.
+
+## Citation
+
+```bibtex
+@software{hodge_agentic_financial_planner_lab,
+  author  = {Hodge, John},
+  title   = {agentic-financial-planner-lab: an auditable financial planning agent framework},
+  year    = {2026},
+  url     = {https://github.com/jman4162/agentic-financial-planner-lab},
+  version = {0.1.0},
+  license = {MIT}
+}
+```
 
 ## License
 

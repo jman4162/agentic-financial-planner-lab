@@ -139,10 +139,21 @@ class CaseFile(BaseModel):
                 return goal.annual_amount_today
         return self.cash_flow.annual_expenses
 
+    _AUTO_MISSING = frozenset(
+        {
+            "cash_flow.annual_expenses",
+            "cash_flow.annual_savings",
+            "portfolio",
+            "goals.retirement.annual_amount_today",
+        }
+    )
+
     @model_validator(mode="after")
     def _flag_missing_material_fields(self) -> "CaseFile":
-        """Record material gaps as dotted paths so downstream stages must disclose them."""
-        found = set(self.missing_fields)
+        """Record material gaps as dotted paths so downstream stages must disclose
+        them. Auto-derived paths are recomputed on every validation (so resolved
+        gaps clear); manually added entries are preserved."""
+        found = set(self.missing_fields) - self._AUTO_MISSING
         if self.cash_flow.annual_expenses is None:
             found.add("cash_flow.annual_expenses")
         if self.cash_flow.effective_savings() is None:

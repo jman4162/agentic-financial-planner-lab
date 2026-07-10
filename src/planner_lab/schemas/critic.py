@@ -14,6 +14,7 @@ CheckId = Literal[
     "missing_inputs_flagged",
     "assumptions_disclosed",
     "disclaimer_present",
+    "diagnostic_framing",
 ]
 
 Severity = Literal["blocker", "warning"]

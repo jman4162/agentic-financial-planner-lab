@@ -38,6 +38,45 @@ def _confirm_fn(yes: bool) -> Any:
     return typer.confirm
 
 
+_RESEARCH_URL_ENV = "PLANNER_LAB_RESEARCH_MCP_URL"
+
+
+def _research_source_from_env(research: bool) -> Any:
+    if not research:
+        return None
+    import os
+
+    url = os.environ.get(_RESEARCH_URL_ENV)
+    if not url:
+        console.print(
+            f"[red]--research requires the {_RESEARCH_URL_ENV} environment variable.[/red]"
+        )
+        raise typer.Exit(1)
+    from planner_lab.adapters import AdapterUnavailableError, get_research_source
+
+    try:
+        return get_research_source(url)
+    except AdapterUnavailableError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+
+def _load_optional_adapters(health: bool, allocation: bool) -> tuple[Any, Any]:
+    from planner_lab.adapters import (
+        AdapterUnavailableError,
+        get_health_metric,
+        get_portfolio_engine,
+    )
+
+    try:
+        metric = get_health_metric() if health else None
+        engine = get_portfolio_engine() if allocation else None
+    except AdapterUnavailableError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+    return metric, engine
+
+
 def _print_report(report: Any) -> None:
     console.print("\nCritic checks:")
     for check in report.checks:
@@ -106,6 +145,15 @@ def analyze(
     ] = False,
     n_paths: Annotated[int, typer.Option(help="Simulation paths")] = 2000,
     seed: Annotated[int, typer.Option(help="Simulation seed")] = 42,
+    research: Annotated[
+        bool, typer.Option("--research", help="Fetch cited research from the configured library")
+    ] = False,
+    health: Annotated[
+        bool, typer.Option("--health", help="Compute the fundedness health metric")
+    ] = False,
+    allocation: Annotated[
+        bool, typer.Option("--allocation", help="Run lifecycle allocation diagnostics")
+    ] = False,
     trace: Annotated[bool, typer.Option(help="Print OpenTelemetry spans to stdout")] = False,
 ) -> None:
     """Run the analysis pipeline and print the memo summary and critic report."""
@@ -115,9 +163,13 @@ def analyze(
 
         setup_telemetry("console")
     case = load_case(case_path)
+    metric, engine = _load_optional_adapters(health, allocation)
     result = pipeline.run_analysis(
         case,
         simulate=simulate,
+        research_source=_research_source_from_env(research),
+        health_metric=metric,
+        portfolio_engine=engine,
         confirm=_confirm_fn(yes),
         n_paths=n_paths,
         seed=seed,
@@ -139,16 +191,29 @@ def memo(
     ] = False,
     n_paths: Annotated[int, typer.Option(help="Simulation paths")] = 2000,
     seed: Annotated[int, typer.Option(help="Simulation seed")] = 42,
+    research: Annotated[
+        bool, typer.Option("--research", help="Fetch cited research from the configured library")
+    ] = False,
+    health: Annotated[
+        bool, typer.Option("--health", help="Compute the fundedness health metric")
+    ] = False,
+    allocation: Annotated[
+        bool, typer.Option("--allocation", help="Run lifecycle allocation diagnostics")
+    ] = False,
 ) -> None:
     """Run the pipeline and write a critic-approved markdown memo plus an audit sidecar."""
     from planner_lab.memo.render import MemoRejectedError, render_markdown
 
     _models, pipeline = _agent_imports()
     case = load_case(case_path)
+    metric, engine = _load_optional_adapters(health, allocation)
     try:
         result = pipeline.run_analysis(
             case,
             simulate=simulate,
+            research_source=_research_source_from_env(research),
+            health_metric=metric,
+            portfolio_engine=engine,
             confirm=_confirm_fn(yes),
             n_paths=n_paths,
             seed=seed,
@@ -175,17 +240,77 @@ def memo(
     _print_report(result.report)
 
 
+@app.command("import-cashflow")
+def import_cashflow(
+    csv_path: Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
+    fmt: Annotated[
+        str, typer.Option("--format", help="CSV preset: generic|monarch|actual|ynab")
+    ] = "generic",
+    case_path: Annotated[
+        Path | None, typer.Option("--case", help="Case file to compare or update")
+    ] = None,
+    write: Annotated[
+        bool, typer.Option("--write", help="Write the derived cash flow into --case")
+    ] = False,
+) -> None:
+    """Derive annual cash flow from a transactions CSV export."""
+    from planner_lab.adapters import AdapterUnavailableError, get_cashflow_importer
+
+    try:
+        importer = get_cashflow_importer(fmt)
+    except AdapterUnavailableError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+    result = importer.import_cashflow(csv_path)
+
+    table = Table(show_header=False, title=f"Cash flow derived from {csv_path.name}")
+    table.add_row("Window", f"{result.window_start} to {result.window_end} (exclusive)")
+    table.add_row("Complete months", str(result.months_covered))
+    table.add_row("Income (take-home)", f"${result.total_inflow:,.0f}/yr")
+    table.add_row("Expenses", f"${result.total_outflow:,.0f}/yr")
+    table.add_row("Savings", f"${result.cash_flow.annual_savings or 0:,.0f}/yr")
+    table.add_row("Excluded transfers", f"${result.excluded_transfer_amount:,.0f}/yr")
+    console.print(table)
+    for warning in result.warnings:
+        console.print(f"[yellow]warning:[/yellow] {warning}")
+
+    if case_path is None:
+        if write:
+            console.print("[red]--write requires --case.[/red]")
+            raise typer.Exit(1)
+        return
+    case = load_case(case_path)
+    console.print("\nCase file cash flow (current -> imported):")
+    for field in ("annual_take_home", "annual_expenses", "annual_savings"):
+        old = getattr(case.cash_flow, field)
+        new = getattr(result.cash_flow, field)
+        old_text = f"${old:,.0f}" if old is not None else "unset"
+        new_text = f"${new:,.0f}" if new is not None else "unset"
+        console.print(f"  {field}: {old_text} -> {new_text}")
+    if write:
+        case.cash_flow = result.cash_flow
+        case = type(case).model_validate(case.model_dump(mode="json"))
+        save_case(case, case_path)
+        console.print(f"[green]Case file updated:[/green] {case_path}")
+
+
 @app.command()
 def intake(
     output: Annotated[Path, typer.Option("-o", "--output", help="Where to save the case file")],
     session_id: Annotated[str | None, typer.Option(help="Resumable session id")] = None,
 ) -> None:
     """Interactive intake chat. Type 'done' to save the case file and exit."""
+    import os
+
     _models, _pipeline = _agent_imports()
     from planner_lab.agents.models import build_model
     from planner_lab.agents.orchestrator import build_orchestrator
 
-    agent, state = build_orchestrator(build_model(), session_id=session_id)
+    agent, state = build_orchestrator(
+        build_model(),
+        session_id=session_id,
+        research_url=os.environ.get(_RESEARCH_URL_ENV),
+    )
     console.print(
         "[bold]Planning intake.[/bold] Describe your question; type 'done' to save and exit."
     )

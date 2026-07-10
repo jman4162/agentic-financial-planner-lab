@@ -40,12 +40,14 @@ def build_orchestrator(
     model: Model,
     case: CaseFile | None = None,
     session_id: str | None = None,
+    research_url: str | None = None,
 ) -> tuple[Agent, RunState]:
     working_case = case if case is not None else empty_case("(to be gathered)")
     state = RunState(
         case=working_case,
         ledger=ComputationLedger(case_id=working_case.case_id),
         allowed_tools=TOOL_NAMES,
+        research_url=research_url,
     )
     kwargs: dict[str, object] = {}
     if session_id is not None:

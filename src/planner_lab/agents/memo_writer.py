@@ -7,6 +7,7 @@ only affect narrative, selection, and framing — all of which the critic review
 """
 
 import json
+from collections.abc import Sequence
 
 from pydantic import BaseModel
 from strands.models.model import Model
@@ -15,8 +16,10 @@ from planner_lab.agents.structured import get_structured
 from planner_lab.memo.disclaimer import REQUIRED_DISCLAIMER
 from planner_lab.schemas.case_file import CaseFile
 from planner_lab.schemas.critic import CriticReport
-from planner_lab.schemas.memo import PlanningMemo, ScenarioNarrative, TracedNumber
-from planner_lab.schemas.results import ComputationLedger
+from planner_lab.schemas.memo import Citation, PlanningMemo, ScenarioNarrative, TracedNumber
+from planner_lab.schemas.results import ComputationLedger, ResearchDocument
+
+_EXCERPT_BUDGET = 1500
 
 _SYSTEM_PROMPT = """\
 You write educational financial planning memos. Hard rules:
@@ -27,6 +30,8 @@ You write educational financial planning memos. Hard rules:
 - State clearly that outcomes depend on assumptions.
 - Mention the base, conservative, and optimistic assumption sets by name in the
   methodology section, and state that figures are real (today's dollars).
+- When citable sources are provided, ground methodology claims in them and list
+  the supporting refs in citation_refs. Never list a ref that was not provided.
 """
 
 
@@ -42,6 +47,7 @@ class MemoDraft(BaseModel):
     trade_offs: list[str]
     next_questions: list[str]
     methodology: str
+    citation_refs: list[str] = []
 
 
 def _number_menu(case: CaseFile, ledger: ComputationLedger) -> str:
@@ -63,10 +69,38 @@ def _number_menu(case: CaseFile, ledger: ComputationLedger) -> str:
         value = getattr(case.cash_flow, field)
         if value is not None:
             lines.append(f"- source_id=case:cash_flow.{field} value={value}")
+    for i, person in enumerate(case.household.persons):
+        if person.planned_retirement_age is not None:
+            lines.append(
+                f"- source_id=case:household.persons.{i}.planned_retirement_age "
+                f"value={person.planned_retirement_age}"
+            )
+    for i, goal in enumerate(case.goals):
+        if goal.annual_amount_today is not None:
+            lines.append(
+                f"- source_id=case:goals.{i}.annual_amount_today value={goal.annual_amount_today}"
+            )
     return "\n".join(lines)
 
 
-def _build_prompt(case: CaseFile, ledger: ComputationLedger, feedback: CriticReport | None) -> str:
+def _citable_sources(research: Sequence[ResearchDocument]) -> str:
+    refs = [doc.ref for doc in research]
+    lines = [
+        "Citable sources. citation_refs is REQUIRED: it must contain at least one of "
+        f"{refs} and nothing else.",
+    ]
+    for doc in research:
+        lines.append(f"- ref={doc.ref} title={doc.title}")
+        lines.append(f"  excerpt: {doc.text[:_EXCERPT_BUDGET]}")
+    return "\n".join(lines)
+
+
+def _build_prompt(
+    case: CaseFile,
+    ledger: ComputationLedger,
+    feedback: CriticReport | None,
+    research: Sequence[ResearchDocument] = (),
+) -> str:
     assert case.assumptions is not None
     sections = [
         f"Planning question: {case.question}",
@@ -86,6 +120,21 @@ def _build_prompt(case: CaseFile, ledger: ComputationLedger, feedback: CriticRep
         "as given. missing_data must include every entry from the case file's",
         f"missing_fields list: {case.missing_fields}.",
     ]
+    if any(e.entry_id.startswith("metric:") for e in ledger.entries):
+        sections += [
+            "",
+            "A comprehensive fundedness metric (cefr) is in the number menu: reference",
+            "it in the executive summary and discuss its haircut components in risks.",
+        ]
+    if any(e.entry_id.startswith("portfolio:") for e in ledger.entries):
+        sections += [
+            "",
+            "Allocation diagnostics are in the menu. In risks or trade_offs, compare",
+            "current_stock_pct with alpha_recommended strictly as a diagnostic model",
+            "comparison. Never phrase it as an instruction to change the allocation.",
+        ]
+    if research:
+        sections += ["", _citable_sources(research)]
     if feedback is not None:
         problems = [f"{c.check_id}: {c.details} {c.evidence}" for c in feedback.blockers()]
         sections += [
@@ -101,14 +150,24 @@ def write_memo(
     ledger: ComputationLedger,
     model: Model,
     feedback: CriticReport | None = None,
+    research: Sequence[ResearchDocument] = (),
+    research_source_name: str = "research",
 ) -> PlanningMemo:
     if case.assumptions is None:
         raise ValueError("case has no assumptions; build and surface them first")
     if not ledger.entries:
         raise ValueError("ledger is empty; run calculators before drafting a memo")
 
-    draft = get_structured(model, MemoDraft, _build_prompt(case, ledger, feedback), _SYSTEM_PROMPT)
+    draft = get_structured(
+        model, MemoDraft, _build_prompt(case, ledger, feedback, research), _SYSTEM_PROMPT
+    )
 
+    docs_by_ref = {doc.ref: doc for doc in research}
+    citations = [
+        Citation(source_name=research_source_name, ref=ref, title=docs_by_ref[ref].title)
+        for ref in dict.fromkeys(draft.citation_refs)
+        if ref in docs_by_ref
+    ]
     missing = sorted(set(draft.missing_data) | set(case.missing_fields))
     return PlanningMemo(
         case_id=case.case_id,
@@ -122,6 +181,6 @@ def write_memo(
         trade_offs=draft.trade_offs,
         next_questions=draft.next_questions,
         methodology=draft.methodology,
-        citations=[],
+        citations=citations,
         disclaimer=REQUIRED_DISCLAIMER,
     )

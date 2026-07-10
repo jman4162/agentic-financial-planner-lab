@@ -4,11 +4,12 @@ Every number that appears in a memo must resolve through `ComputationLedger.reso
 to either a ledger entry output or a case-file field.
 """
 
+import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from planner_lab.schemas.case_file import CaseFile
+from planner_lab.schemas.case_file import CaseFile, CashFlow
 
 
 class LedgerEntry(BaseModel):
@@ -76,6 +77,8 @@ class ComputationLedger(BaseModel):
 
 
 def _resolve_case_path(case: CaseFile, dotted: str) -> float | None:
+    # Accept bracket indexing ("persons[0].age") as well as dotted ("persons.0.age").
+    dotted = dotted.replace("[", ".").replace("]", "")
     node: Any = case
     for part in dotted.split("."):
         if isinstance(node, list):
@@ -123,6 +126,20 @@ class PortfolioDiagnostics(BaseModel):
     engine_name: str
     findings: dict[str, float] = {}
     notes: list[str] = []
+
+
+class CashflowImportResult(BaseModel):
+    """What any CashflowImporter must return: the derived cash flow plus the
+    provenance (window, exclusions, warnings) that makes it auditable."""
+
+    cash_flow: CashFlow
+    window_start: datetime.date
+    window_end: datetime.date
+    months_covered: int = Field(gt=0)
+    total_inflow: float
+    total_outflow: float
+    excluded_transfer_amount: float = 0.0
+    warnings: list[str] = []
 
 
 class ResearchHit(BaseModel):

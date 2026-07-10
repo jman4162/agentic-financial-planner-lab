@@ -5,6 +5,16 @@ description = "Experimental, provider-neutral framework for auditable personal-f
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [{ name = "John Hodge" }]
+keywords = [
+    "financial-planning",
+    "retirement",
+    "monte-carlo",
+    "llm-agents",
+    "mcp",
+    "personal-finance",
+    "fire",
+]
 dependencies = [
     "pydantic>=2.0",
     "typer>=0.12",
@@ -22,9 +32,13 @@ agent = [
 ]
 planning = [
     "monteplan>=0.6",
+    "fundedness>=0.2.4",
+]
+portfolio = [
+    "lifecycle-allocation>=0.2",
 ]
 mcp = [
-    "mcp>=1.0",
+    "mcp>=1.28",
     "httpx>=0.27",
 ]
 dev = [
@@ -52,8 +66,15 @@ packages = ["planner_lab"]
 mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+module = ["fundedness.*", "lifecycle_allocation.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Resolve the package from src directly: macOS file syncing intermittently
+# marks the venv's editable-install .pth hidden, which Python then skips.
+pythonpath = ["src"]
 addopts = "-m 'not ollama and not network'"
 markers = [
     "ollama: needs a local Ollama server",

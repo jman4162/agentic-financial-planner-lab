@@ -16,6 +16,8 @@ class TestLedgerResolve:
         assert ledger.resolve("case:cash_flow.annual_expenses", case) == 88_000
         assert ledger.resolve("case:balance_sheet.investable_assets", case) == 870_000
         assert ledger.resolve("case:balance_sheet.accounts.0.balance", case) == 350_000
+        assert ledger.resolve("case:balance_sheet.accounts[0].balance", case) == 350_000
+        assert ledger.resolve("case:household.persons[0].planned_retirement_age", case) == 62
 
     def test_unresolvable_ids_return_none(self) -> None:
         case = make_case()

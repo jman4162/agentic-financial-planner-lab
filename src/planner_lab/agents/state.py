@@ -11,6 +11,7 @@ class RunState:
     case: CaseFile
     ledger: ComputationLedger
     allowed_tools: frozenset[str] = field(default_factory=frozenset)
+    research_url: str | None = None
 
     @property
     def assumptions_surfaced(self) -> bool:

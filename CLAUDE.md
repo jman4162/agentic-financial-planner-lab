@@ -13,17 +13,18 @@ uv run ruff check . && uv run ruff format --check .   # lint/format
 uv run mypy                            # type check (strict)
 uv run planner-lab validate examples/cases/sample_household.yaml
 uv run planner-lab memo examples/cases/sample_household.yaml -o memo.md --yes  # needs Ollama
-uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --yes
+uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --health --allocation --yes
+uv run planner-lab import-cashflow examples/data/sample_transactions_monarch.csv --format monarch
 bash scripts/slopcheck.sh              # AI-slop lint on public prose (see Writing style)
 ```
 
-The package lives in `src/planner_lab/` (src layout, hatchling). Dependencies are grouped as optional extras in `pyproject.toml` (`agent`, `planning`, `mcp`, `dev`); the core must install, import, and pass its tests with no extras (`tests/test_pipeline_stub.py` and `tests/test_hooks.py` need `agent`; `tests/test_adapter_monteplan.py` skips without `planning`).
+The package lives in `src/planner_lab/` (src layout, hatchling). Dependencies are grouped as optional extras in `pyproject.toml` (`agent`, `planning`, `portfolio`, `mcp`, `dev`); the core must install, import, and pass its tests with no extras (pipeline/hook tests need `agent`; `test_adapter_*` files skip when their package is absent). `--research` needs the `PLANNER_LAB_RESEARCH_MCP_URL` env var; that URL lives only in the environment, never in code or docs.
 
 Known environment quirk: this repo lives under `~/Documents`, and macOS file syncing sometimes marks new `.venv` files with the BSD `hidden` flag, which makes Python skip the editable-install `.pth` file (`ModuleNotFoundError: planner_lab`). Fix: `chflags -R nohidden .venv` and delete any `*.pth` duplicates with ` 2`/` 3` suffixes in `site-packages`.
 
 ## Project status
 
-Phases 1-3 built: schemas, calculators, traceability ledger, deterministic critic, memo renderer, CLI (`validate`/`calc`/`analyze`/`memo`/`intake`), agent pipeline with two LLM call sites (memo writer, LLM critic), compliance hooks, and the Monte Carlo simulation adapter. Deferred: MCP research sources with citations, financial-health metrics, portfolio analytics, CSV cash-flow import.
+Phases 1-6 built: schemas, calculators, traceability ledger, deterministic critic (nine checks), memo renderer, CLI (`validate`/`calc`/`analyze`/`memo`/`intake`/`import-cashflow`), agent pipeline with exactly two LLM call sites (memo writer, LLM critic), compliance hooks, Monte Carlo simulation adapter, generic MCP research adapter with citation enforcement, CEFR health metric, lifecycle allocation diagnostics (framed as comparisons, never instructions — `check_diagnostic_framing` guards this), and a stdlib CSV cash-flow importer with presets for common budgeting-app exports.
 
 ## What this project is
 

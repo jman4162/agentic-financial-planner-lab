@@ -28,6 +28,79 @@ class TestValidate:
         assert result.exit_code == 1
 
 
+class TestImportCashflow:
+    DATA = Path(__file__).parent / "data"
+
+    def test_prints_totals_and_exclusions(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "import-cashflow",
+                str(self.DATA / "synthetic_transactions_monarch.csv"),
+                "--format",
+                "monarch",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "96,000" in result.output
+        assert "Excluded transfers" in result.output
+        assert "48,000" in result.output
+
+    def test_write_updates_case(self, tmp_path: Path) -> None:
+        import shutil
+
+        from planner_lab.case_io import load_case
+
+        case_copy = tmp_path / "case.yaml"
+        shutil.copy(EXAMPLES / "incomplete_household.yaml", case_copy)
+        result = runner.invoke(
+            app,
+            [
+                "import-cashflow",
+                str(self.DATA / "synthetic_transactions_monarch.csv"),
+                "--format",
+                "monarch",
+                "--case",
+                str(case_copy),
+                "--write",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Case file updated" in result.output
+        updated = load_case(case_copy)
+        assert updated.cash_flow.annual_take_home == 96_000.0
+        # The missing-fields validator reran: cash-flow gaps are resolved.
+        assert "cash_flow.annual_expenses" not in updated.missing_fields
+        assert "cash_flow.annual_savings" not in updated.missing_fields
+
+    def test_write_requires_case(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "import-cashflow",
+                str(self.DATA / "synthetic_transactions_monarch.csv"),
+                "--format",
+                "monarch",
+                "--write",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "--write requires --case" in result.output
+
+    def test_unknown_format_lists_presets(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "import-cashflow",
+                str(self.DATA / "synthetic_transactions_monarch.csv"),
+                "--format",
+                "quickbooks",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "monarch" in result.output
+
+
 class TestCalc:
     def test_funded_ratio(self) -> None:
         result = runner.invoke(

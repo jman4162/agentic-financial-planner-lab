@@ -33,6 +33,7 @@ def run_critic(
         checks.check_citations_present(memo, ledger),
         checks.check_nominal_real_consistent(memo, ledger),
         checks.check_certainty_not_overstated(memo),
+        checks.check_diagnostic_framing(memo, ledger),
     ]
     if llm_checks is not None:
         results.extend(llm_checks(memo))

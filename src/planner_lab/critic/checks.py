@@ -188,6 +188,40 @@ def check_nominal_real_consistent(memo: PlanningMemo, ledger: ComputationLedger)
     )
 
 
+_IMPERATIVE_ALLOCATION = re.compile(
+    r"\b(should|must|need to|recommend(?:ed)?)\b[^.]{0,60}"
+    r"\b(allocation|stock share|equity exposure|rebalanc\w+)\b",
+    re.IGNORECASE,
+)
+
+
+def check_diagnostic_framing(memo: PlanningMemo, ledger: ComputationLedger) -> CriticCheck:
+    """Allocation diagnostics must stay comparative; imperative allocation
+    prose is flagged. Warning severity: legitimate trade-off prose can match."""
+    ran_diagnostics = any(e.entry_id.startswith("portfolio:") for e in ledger.entries)
+    if not ran_diagnostics:
+        return CriticCheck(
+            check_id="diagnostic_framing",
+            passed=True,
+            severity="warning",
+            details="no portfolio diagnostics were run; framing check not applicable",
+        )
+    hits = [
+        m.group(0) for prose in memo.all_prose() for m in _IMPERATIVE_ALLOCATION.finditer(prose)
+    ]
+    return CriticCheck(
+        check_id="diagnostic_framing",
+        passed=not hits,
+        severity="warning",
+        details=(
+            "allocation diagnostics framed comparatively"
+            if not hits
+            else "memo phrases allocation diagnostics as instructions"
+        ),
+        evidence=hits,
+    )
+
+
 def check_certainty_not_overstated(memo: PlanningMemo) -> CriticCheck:
     hits = [
         m.group(0)
