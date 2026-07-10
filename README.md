@@ -1,6 +1,8 @@
 # agentic-financial-planner-lab
 
 [![ci](https://github.com/jman4162/agentic-financial-planner-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/jman4162/agentic-financial-planner-lab/actions/workflows/ci.yml)
+[![pypi](https://img.shields.io/pypi/v/planner-lab)](https://pypi.org/project/planner-lab/)
+![python](https://img.shields.io/pypi/pyversions/planner-lab)
 [![license](https://img.shields.io/github/license/jman4162/agentic-financial-planner-lab)](LICENSE)
 
 An experimental, provider-neutral framework for building auditable personal-finance planning agents: a typed case file, deterministic calculators, a Monte Carlo simulation adapter, cited research through the Model Context Protocol, and a critic gate that blocks any memo whose numbers cannot be traced to a recorded computation.
@@ -50,13 +52,13 @@ flowchart TD
 Requires Python 3.11+.
 
 ```bash
-uv sync --extra agent --extra dev
+pip install "planner-lab[agent]"        # from PyPI
 ```
 
-Or with pip:
+Or work from a clone:
 
 ```bash
-pip install -e ".[agent,dev]"
+uv sync --extra agent --extra dev
 ```
 
 Extras are optional by design. The core installs without any agent framework; `agent` adds the Strands SDK (with Ollama and OpenTelemetry support), `mcp` adds Model Context Protocol clients for research sources.
