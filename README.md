@@ -145,7 +145,7 @@ Working retirement-readiness pipeline: case-file schemas, deterministic calculat
   title   = {agentic-financial-planner-lab: an auditable financial planning agent framework},
   year    = {2026},
   url     = {https://github.com/jman4162/agentic-financial-planner-lab},
-  version = {0.1.0},
+  version = {0.1.1},
   license = {MIT}
 }
 ```
