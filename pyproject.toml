@@ -3,18 +3,25 @@ name = "planner-lab"
 version = "0.1.0"
 description = "Experimental, provider-neutral framework for auditable personal-finance planning agents"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "pydantic>=2.0",
     "typer>=0.12",
     "rich>=13.0",
+    "pyyaml>=6.0",
 ]
+
+[project.scripts]
+planner-lab = "planner_lab.cli:app"
 
 [project.optional-dependencies]
 agent = [
-    "strands-agents[ollama,otel]>=1.0",
+    "strands-agents[ollama,otel]>=1.46,<2",
     "strands-agents-tools>=0.2",
+]
+planning = [
+    "monteplan>=0.6",
 ]
 mcp = [
     "mcp>=1.0",
@@ -25,6 +32,7 @@ dev = [
     "hypothesis>=6.0",
     "ruff>=0.6",
     "mypy>=1.10",
+    "types-pyyaml>=6.0",
 ]
 
 [build-system]
@@ -42,6 +50,12 @@ src = ["src", "tests"]
 strict = true
 packages = ["planner_lab"]
 mypy_path = "src"
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not ollama and not network'"
+markers = [
+    "ollama: needs a local Ollama server",
+    "network: needs internet access",
+]

@@ -16,6 +16,8 @@ import os
 from strands import Agent, tool
 from strands.models.ollama import OllamaModel
 
+from planner_lab.calculators import funded_ratio as _funded_ratio
+
 
 @tool
 def funded_ratio(
@@ -37,19 +39,7 @@ def funded_ratio(
             fraction. Omit this argument unless the user specified a rate;
             the default is 0.04 (the 4% guideline).
     """
-    if not 0.01 <= withdrawal_rate <= 0.20:
-        raise ValueError(
-            f"withdrawal_rate={withdrawal_rate} is outside the plausible range "
-            "0.01-0.20. Omit the argument to use the 0.04 default."
-        )
-    if portfolio_value < 0 or annual_spending <= 0:
-        raise ValueError("portfolio_value must be >= 0 and annual_spending > 0.")
-    required_capital = annual_spending / withdrawal_rate
-    return {
-        "funded_ratio": round(portfolio_value / required_capital, 3),
-        "required_capital": round(required_capital, 2),
-        "assumptions": {"withdrawal_rate": withdrawal_rate},
-    }
+    return _funded_ratio(portfolio_value, annual_spending, withdrawal_rate)
 
 
 SYSTEM_PROMPT = """\

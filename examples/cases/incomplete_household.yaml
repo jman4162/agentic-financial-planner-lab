@@ -1,0 +1,22 @@
+# Synthetic fixture with deliberate gaps: no expenses, savings, portfolio, or
+# retirement spending target. Used to exercise missing-data disclosure.
+case_id: incomplete-household
+created: 2026-01-15
+question: Am I on track for retirement?
+household:
+  persons:
+    - name: Riley Example
+      birth_year: 1988
+goals:
+  - goal_id: retire-someday
+    kind: retirement
+    description: Retire eventually, target age unknown
+balance_sheet:
+  accounts:
+    - account_id: trad-1
+      name: Workplace retirement (pre-tax)
+      account_type: traditional
+      balance: 95000
+      annual_contribution: 10000
+cash_flow:
+  annual_gross_income: 105000

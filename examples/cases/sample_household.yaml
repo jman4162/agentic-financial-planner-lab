@@ -1,0 +1,64 @@
+# Synthetic example household. All figures are invented.
+case_id: sample-household
+created: 2026-01-15
+question: Can we retire at 62 while spending $60,000 a year?
+household:
+  persons:
+    - name: Avery Example
+      birth_year: 1972
+      planned_retirement_age: 62
+    - name: Jordan Example
+      birth_year: 1974
+      planned_retirement_age: 62
+  state: CO
+  filing_status: married_joint
+  dependents: 0
+goals:
+  - goal_id: retire-62
+    kind: retirement
+    description: Retire at 62 with flexible travel spending
+    target_year: 2034
+    annual_amount_today: 60000
+    priority: need
+balance_sheet:
+  accounts:
+    - account_id: taxable-1
+      name: Joint brokerage
+      account_type: taxable
+      balance: 350000
+      annual_contribution: 12000
+    - account_id: trad-1
+      name: Workplace retirement (pre-tax)
+      account_type: traditional
+      balance: 520000
+      annual_contribution: 30000
+    - account_id: roth-1
+      name: Roth accounts
+      account_type: roth
+      balance: 110000
+      annual_contribution: 8000
+    - account_id: cash-1
+      name: Savings account
+      account_type: cash
+      balance: 40000
+      annual_contribution: 0
+  liabilities:
+    - liability_id: mortgage-1
+      name: Mortgage
+      balance: 180000
+      rate: 0.0325
+      minimum_annual_payment: 21600
+cash_flow:
+  annual_gross_income: 190000
+  annual_take_home: 138000
+  annual_expenses: 88000
+  annual_savings: 50000
+portfolio:
+  stock_pct: 0.70
+  bond_pct: 0.25
+  cash_pct: 0.05
+  weighted_expense_ratio: 0.0008
+constraints:
+  liquidity_floor: 30000
+  notes:
+    - No individual stock positions desired.

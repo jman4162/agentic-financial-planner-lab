@@ -13,7 +13,7 @@ This is a research and education project. It is not a financial advisor, does no
 
 ## Install
 
-Requires Python 3.10+.
+Requires Python 3.11+.
 
 ```bash
 uv sync --extra agent --extra dev
@@ -29,17 +29,45 @@ Extras are optional by design. The core installs without any agent framework; `a
 
 ## Try it
 
+The core works offline with no LLM:
+
+```bash
+uv run planner-lab validate examples/cases/sample_household.yaml
+uv run planner-lab calc funded-ratio --portfolio 900000 --spending 50000
+uv run planner-lab calc fi-timeline --portfolio 250000 --savings 50000 --spending 60000
+```
+
 With a local [Ollama](https://ollama.com/) server running and a tool-calling-capable model pulled (default `qwen3`; override with `OLLAMA_MODEL`):
 
 ```bash
+# Full pipeline: assumptions -> calculators -> memo draft -> critic gate -> memo
+uv run planner-lab memo examples/cases/sample_household.yaml -o memo.md --yes
+
+# Add Monte Carlo simulation (needs the planning extra)
+uv sync --extra agent --extra planning --extra dev
+uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --yes
+
+# Interactive intake chat that builds a case file
+uv run planner-lab intake -o my_case.yaml
+
+# Minimal agent-plus-tool example
 uv run python examples/hello_agent.py
 ```
 
-The example wires a Strands agent to one deterministic tool (a funded-ratio calculator) and asks it a planning question. The agent calls the tool for the math and explains the result; it never computes the ratio itself.
+The memo command writes the markdown memo plus a `.audit.json` sidecar holding the full computation ledger and critic report, so every number can be checked by hand. If the critic rejects the draft twice, no memo is written and the failing checks are printed.
+
+## How a run works
+
+1. The case file is loaded and validated; material gaps are recorded.
+2. Base, conservative, and optimistic assumption sets are shown for confirmation (`--yes` accepts them non-interactively). Rates are real, after inflation.
+3. Deterministic calculators run per assumption set: funded ratio, years to financial independence, sustainable spending. Each result lands in the computation ledger with an id.
+4. Optionally, a Monte Carlo engine simulates each set (plus crash and sequence-risk stress runs) behind a generic `ScenarioSimulator` interface.
+5. The LLM drafts the memo, citing numbers only from the ledger menu it is given.
+6. The critic runs eight deterministic checks (traceability, no securities advice, disclaimer, assumption disclosure, missing-data disclosure, citation consistency, real/nominal labeling, certainty language) plus an LLM tone review. One revision is attempted; then the run fails.
 
 ## Status
 
-Early scaffolding. The case-file schema, calculators, importers, and critic stage are not built yet. See `CLAUDE.md` for the intended architecture and the rules the codebase follows.
+Working retirement-readiness pipeline: case-file schemas, deterministic calculators, critic gate, memo renderer, interactive intake, and an optional Monte Carlo adapter. Not yet built: research/citation sources, financial-health metrics, portfolio analytics, cash-flow import. See `CLAUDE.md` for architecture rules.
 
 ## License
 

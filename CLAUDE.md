@@ -5,20 +5,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-uv sync --extra agent --extra dev      # install (Strands SDK, dev tooling)
-uv run pytest                          # run tests
+uv sync --extra agent --extra planning --extra dev    # full install
+uv run pytest                          # run tests (offline; live tests are opt-in marks)
 uv run pytest tests/test_x.py::test_y  # run a single test
+uv run pytest -m ollama                # live tests against local Ollama (excluded by default)
 uv run ruff check . && uv run ruff format --check .   # lint/format
 uv run mypy                            # type check (strict)
-uv run python examples/hello_agent.py  # smoke-test the agent layer (needs local Ollama)
+uv run planner-lab validate examples/cases/sample_household.yaml
+uv run planner-lab memo examples/cases/sample_household.yaml -o memo.md --yes  # needs Ollama
+uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --yes
 bash scripts/slopcheck.sh              # AI-slop lint on public prose (see Writing style)
 ```
 
-The package lives in `src/planner_lab/` (src layout, hatchling). Dependencies are grouped as optional extras in `pyproject.toml` (`agent`, `mcp`, `dev`); the core must install and import with no extras.
+The package lives in `src/planner_lab/` (src layout, hatchling). Dependencies are grouped as optional extras in `pyproject.toml` (`agent`, `planning`, `mcp`, `dev`); the core must install, import, and pass its tests with no extras (`tests/test_pipeline_stub.py` and `tests/test_hooks.py` need `agent`; `tests/test_adapter_monteplan.py` skips without `planning`).
+
+Known environment quirk: this repo lives under `~/Documents`, and macOS file syncing sometimes marks new `.venv` files with the BSD `hidden` flag, which makes Python skip the editable-install `.pth` file (`ModuleNotFoundError: planner_lab`). Fix: `chflags -R nohidden .venv` and delete any `*.pth` duplicates with ` 2`/` 3` suffixes in `site-packages`.
 
 ## Project status
 
-Early scaffolding. The package, Strands agent example, and doc tooling exist; the case-file schema, calculators, importers, and critic stage do not yet. Use the intended layout and rules below rather than inventing new structure.
+Phases 1-3 built: schemas, calculators, traceability ledger, deterministic critic, memo renderer, CLI (`validate`/`calc`/`analyze`/`memo`/`intake`), agent pipeline with two LLM call sites (memo writer, LLM critic), compliance hooks, and the Monte Carlo simulation adapter. Deferred: MCP research sources with citations, financial-health metrics, portfolio analytics, CSV cash-flow import.
 
 ## What this project is
 
