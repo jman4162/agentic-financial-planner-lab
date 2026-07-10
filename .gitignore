@@ -1,0 +1,33 @@
+# Private working notes — never commit
+*.local.md
+CLAUDE.local.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Slop-lint venv (auto-created by scripts/slopcheck.sh)
+scripts/.slopvenv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets
+.env
+.env.*
+
+# Real financial data must never land in the repo
+data/private/
+*.ofx
+*.qfx
+
+# OS
+.DS_Store
