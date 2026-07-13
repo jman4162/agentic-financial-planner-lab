@@ -1,0 +1,64 @@
+# Synthetic golden eval case. All figures invented.
+name: on-track-couple
+simulate: true
+case:
+  case_id: g-on-track
+  created: '2026-01-15'
+  question: Can we retire at 62 while spending $60,000 a year?
+  household:
+    persons:
+    - name: Avery Example
+      birth_year: 1972
+      planned_retirement_age: 62
+    - name: Jordan Example
+      birth_year: 1974
+      planned_retirement_age: 62
+  balance_sheet:
+    accounts:
+    - account_id: taxable-1
+      name: taxable-1
+      account_type: taxable
+      balance: 350000
+      annual_contribution: 12000
+    - account_id: trad-1
+      name: trad-1
+      account_type: traditional
+      balance: 520000
+      annual_contribution: 30000
+    - account_id: roth-1
+      name: roth-1
+      account_type: roth
+      balance: 110000
+      annual_contribution: 8000
+  cash_flow:
+    annual_take_home: 138000
+    annual_expenses: 88000
+    annual_savings: 50000
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 60000
+  portfolio:
+    stock_pct: 0.7
+    bond_pct: 0.25
+    cash_pct: 0.05
+  income_streams:
+  - stream_id: ss-1
+    name: Social Security (Avery)
+    kind: social_security
+    monthly_amount: 2800
+    start_age: 67
+  - stream_id: ss-2
+    name: Social Security (Jordan)
+    kind: social_security
+    monthly_amount: 2200
+    start_age: 67
+    person_index: 1
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.653333

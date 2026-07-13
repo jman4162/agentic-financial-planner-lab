@@ -1,0 +1,35 @@
+# Synthetic golden eval case. All figures invented.
+name: no-portfolio
+simulate: false
+case:
+  case_id: g-no-portfolio
+  created: '2026-01-15'
+  question: How close am I to financial independence?
+  household:
+    persons:
+    - name: Alex Example
+      birth_year: 1980
+      planned_retirement_age: 65
+  balance_sheet:
+    accounts:
+    - account_id: taxable-1
+      name: taxable-1
+      account_type: taxable
+      balance: 400000
+      annual_contribution: 20000
+  cash_flow:
+    annual_take_home: 110000
+    annual_expenses: 60000
+    annual_savings: 50000
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 60000
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.266667

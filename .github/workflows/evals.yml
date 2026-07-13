@@ -1,0 +1,51 @@
+name: evals
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  golden-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EVAL_MODEL: qwen2.5:3b
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --all-extras
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+        timeout-minutes: 5
+      - name: Cache model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-${{ env.EVAL_MODEL }}
+      - name: Start Ollama and pull model
+        timeout-minutes: 15
+        run: |
+          ollama serve &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:11434/api/tags >/dev/null && break
+            sleep 2
+          done
+          ollama pull "$EVAL_MODEL"
+      - name: Run golden evals
+        timeout-minutes: 40
+        env:
+          OLLAMA_MODEL: ${{ env.EVAL_MODEL }}
+        run: uv run python evals/run_evals.py --out evals/reports/ci-latest.md
+      - name: Publish report to job summary
+        if: always()
+        run: cat evals/reports/ci-latest.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: evals/reports/ci-latest.md

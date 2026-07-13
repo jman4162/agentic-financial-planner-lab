@@ -1,0 +1,38 @@
+# Synthetic golden eval case. All figures invented.
+name: young-saver
+simulate: false
+case:
+  case_id: g-young
+  created: '2026-01-15'
+  question: Am I on track at 27?
+  household:
+    persons:
+    - name: Rowan Example
+      birth_year: 1999
+      planned_retirement_age: 60
+  balance_sheet:
+    accounts:
+    - account_id: roth-1
+      name: roth-1
+      account_type: roth
+      balance: 40000
+      annual_contribution: 12000
+  cash_flow:
+    annual_take_home: 78000
+    annual_expenses: 48000
+    annual_savings: 24000
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 50000
+  portfolio:
+    stock_pct: 1.0
+    bond_pct: 0.0
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.032

@@ -1,0 +1,52 @@
+# Synthetic golden eval case. All figures invented.
+name: near-retiree
+simulate: true
+case:
+  case_id: g-near-retiree
+  created: '2026-01-15'
+  question: I am 64 and retiring next year. Am I ready?
+  household:
+    persons:
+    - name: Lee Example
+      birth_year: 1962
+      planned_retirement_age: 65
+  balance_sheet:
+    accounts:
+    - account_id: trad-1
+      name: trad-1
+      account_type: traditional
+      balance: 900000
+      annual_contribution: 0
+    - account_id: roth-1
+      name: roth-1
+      account_type: roth
+      balance: 150000
+      annual_contribution: 0
+  cash_flow:
+    annual_expenses: 65000
+    annual_savings: 10000
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 65000
+  portfolio:
+    stock_pct: 0.5
+    bond_pct: 0.45
+    cash_pct: 0.05
+  income_streams:
+  - stream_id: ss-1
+    name: Social Security
+    kind: social_security
+    monthly_amount: 3100
+    start_age: 67
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.646154
+  - tool: funded_ratio_net_of_income
+    label: base
+    key: funded_ratio

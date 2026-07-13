@@ -1,0 +1,48 @@
+# Synthetic golden eval case. All figures invented.
+name: education-family
+simulate: true
+case:
+  case_id: g-education
+  created: '2026-01-15'
+  question: Can we fund college and still retire at 60?
+  household:
+    persons:
+    - name: Sam Example
+      birth_year: 1982
+      planned_retirement_age: 60
+  balance_sheet:
+    accounts:
+    - account_id: taxable-1
+      name: taxable-1
+      account_type: taxable
+      balance: 500000
+      annual_contribution: 25000
+    - account_id: 529-1
+      name: 529-1
+      account_type: education
+      balance: 90000
+      annual_contribution: 5000
+  cash_flow:
+    annual_take_home: 145000
+    annual_expenses: 90000
+    annual_savings: 30000
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 70000
+  - goal_id: college
+    kind: education
+    description: College
+    target_year: 2033
+    annual_amount_today: 35000
+  portfolio:
+    stock_pct: 0.7
+    bond_pct: 0.3
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.285714

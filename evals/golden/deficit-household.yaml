@@ -1,0 +1,38 @@
+# Synthetic golden eval case. All figures invented.
+name: deficit-household
+simulate: false
+case:
+  case_id: g-deficit
+  created: '2026-01-15'
+  question: Can I ever retire on my current path?
+  household:
+    persons:
+    - name: Alex Example
+      birth_year: 1980
+      planned_retirement_age: 65
+  balance_sheet:
+    accounts:
+    - account_id: taxable-1
+      name: taxable-1
+      account_type: taxable
+      balance: 30000
+      annual_contribution: 0
+  cash_flow:
+    annual_take_home: 52000
+    annual_expenses: 58000
+    annual_savings: 0
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 45000
+  portfolio:
+    stock_pct: 0.7
+    bond_pct: 0.3
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.026667

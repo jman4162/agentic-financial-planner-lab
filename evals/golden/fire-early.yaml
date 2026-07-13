@@ -1,0 +1,38 @@
+# Synthetic golden eval case. All figures invented.
+name: fire-early
+simulate: true
+case:
+  case_id: g-fire
+  created: '2026-01-15'
+  question: Can I retire at 45 with a lean budget?
+  household:
+    persons:
+    - name: Kai Example
+      birth_year: 1992
+      planned_retirement_age: 45
+  balance_sheet:
+    accounts:
+    - account_id: taxable-1
+      name: taxable-1
+      account_type: taxable
+      balance: 1300000
+      annual_contribution: 90000
+  cash_flow:
+    annual_take_home: 190000
+    annual_expenses: 45000
+    annual_savings: 90000
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 42000
+  portfolio:
+    stock_pct: 0.9
+    bond_pct: 0.1
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 1.238095

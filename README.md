@@ -113,10 +113,14 @@ Full walkthroughs with real generated memos, checked in verbatim:
 
 1. The case file is loaded and validated; material gaps are recorded.
 2. Base, conservative, and optimistic assumption sets are shown for confirmation (`--yes` accepts them non-interactively). Rates are real, after inflation.
-3. Deterministic calculators run per assumption set: funded ratio, years to financial independence, sustainable spending. Each result lands in the computation ledger with an id.
-4. Optionally, a Monte Carlo engine simulates each set (plus crash and sequence-risk stress runs) behind a generic `ScenarioSimulator` interface.
+3. Deterministic calculators run per assumption set: funded ratio (gross, and net of Social Security or pension income when the case has income streams), years to financial independence, sustainable spending. Each result lands in the computation ledger with an id.
+4. Optionally, a Monte Carlo engine simulates each set behind a generic `ScenarioSimulator` interface: correlated stock/bond/cash assets at the case's portfolio weights, guaranteed-income streams, education and purchase goals as outflow events, crash and sequence-risk stress runs, a choice of spending policy (`--spending-policy` constant-real, Guyton-Klinger-style guardrails, VPW, floor-ceiling, percent-of-portfolio), a five-policy comparison (`--compare-spending-policies`), parameter sensitivity (`--sensitivity`), and a Social Security claiming-age comparison at 62/67/70 (`--ss-comparison`).
 5. The LLM drafts the memo, citing numbers only from the ledger menu it is given.
-6. The critic runs eight deterministic checks (traceability, no securities advice, disclaimer, assumption disclosure, missing-data disclosure, citation consistency, real/nominal labeling, certainty language) plus an LLM tone review. One revision is attempted; then the run fails.
+6. The critic runs ten deterministic checks (structured-number traceability, prose dollar/percent traceability, no securities advice, disclaimer, assumption disclosure, missing-data disclosure, citation consistency, real/nominal labeling, certainty language, diagnostic framing) plus an LLM tone review. One revision is attempted; then the run fails.
+
+## Evals
+
+`evals/golden/` holds ten synthetic household cases with expected ledger values. `uv run python evals/run_evals.py` runs each through the full pipeline against a real local model and writes a report ([latest](evals/reports/latest.md)) recording the approval rate: how often the model produced a memo that survived every check. Deterministic ledger mismatches always fail the run; critic rejections are the system working as designed and are scored, not hidden. A nightly GitHub Actions job runs the suite against a small cached Ollama model.
 
 ## Configuration
 

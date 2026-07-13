@@ -1,0 +1,31 @@
+# Synthetic golden eval case. All figures invented.
+name: minimal-edge
+simulate: false
+case:
+  case_id: g-minimal
+  created: '2026-01-15'
+  question: What does my situation look like?
+  household:
+    persons:
+    - name: Casey Example
+      birth_year: 1985
+  balance_sheet:
+    accounts:
+    - account_id: taxable-1
+      name: taxable-1
+      account_type: taxable
+      balance: 15000
+      annual_contribution: 1200
+  cash_flow:
+    annual_expenses: 30000
+    annual_savings: 1200
+  portfolio:
+    stock_pct: 0.8
+    bond_pct: 0.2
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.02

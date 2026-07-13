@@ -13,8 +13,10 @@ uv run ruff check . && uv run ruff format --check .   # lint/format
 uv run mypy                            # type check (strict)
 uv run planner-lab validate examples/cases/sample_household.yaml
 uv run planner-lab memo examples/cases/sample_household.yaml -o memo.md --yes  # needs Ollama
-uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --health --allocation --yes
+uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --health --allocation \
+  --ss-comparison --spending-policy vpw --compare-spending-policies --sensitivity --yes
 uv run planner-lab import-cashflow examples/data/sample_transactions_monarch.csv --format monarch
+uv run python evals/run_evals.py       # golden evals against the local model (slow; writes report)
 bash scripts/slopcheck.sh              # AI-slop lint on public prose (see Writing style)
 ```
 
@@ -24,7 +26,7 @@ Known environment quirk: this repo lives under `~/Documents`, and macOS file syn
 
 ## Project status
 
-Phases 1-6 built: schemas, calculators, traceability ledger, deterministic critic (nine checks), memo renderer, CLI (`validate`/`calc`/`analyze`/`memo`/`intake`/`import-cashflow`), agent pipeline with exactly two LLM call sites (memo writer, LLM critic), compliance hooks, Monte Carlo simulation adapter, generic MCP research adapter with citation enforcement, CEFR health metric, lifecycle allocation diagnostics (framed as comparisons, never instructions — `check_diagnostic_framing` guards this), and a stdlib CSV cash-flow importer with presets for common budgeting-app exports.
+Built: schemas (including guaranteed-income streams and per-asset-class assumptions), calculators, traceability ledger, deterministic critic (ten checks, including prose dollar/percent verification), memo renderer, CLI (`validate`/`calc`/`analyze`/`memo`/`intake`/`import-cashflow`), agent pipeline with exactly two LLM call sites (memo writer, LLM critic), compliance hooks, Monte Carlo simulation adapter (multi-asset, spending policies, sensitivity, SS claiming comparison, goal outflow events), generic MCP research adapter with citation enforcement, CEFR health metric with income-netted liability segments, lifecycle allocation diagnostics (comparisons, never instructions), a stdlib CSV cash-flow importer, and a golden eval harness (`evals/`) with a nightly CI job running a real local model. Deferred: taxes/RMD/Roth conversions, additional model providers, Streamlit demo, historical backtesting.
 
 ## What this project is
 

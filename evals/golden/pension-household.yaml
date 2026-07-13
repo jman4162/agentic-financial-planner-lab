@@ -1,0 +1,48 @@
+# Synthetic golden eval case. All figures invented.
+name: pension-household
+simulate: true
+case:
+  case_id: g-pension
+  created: '2026-01-15'
+  question: Does my pension change when I can stop working?
+  household:
+    persons:
+    - name: Morgan Example
+      birth_year: 1970
+      planned_retirement_age: 60
+  balance_sheet:
+    accounts:
+    - account_id: trad-1
+      name: trad-1
+      account_type: traditional
+      balance: 450000
+      annual_contribution: 15000
+  cash_flow:
+    annual_expenses: 70000
+    annual_savings: 15000
+  goals:
+  - goal_id: retire
+    kind: retirement
+    description: Retirement
+    annual_amount_today: 70000
+  portfolio:
+    stock_pct: 0.6
+    bond_pct: 0.4
+  income_streams:
+  - stream_id: pen-1
+    name: State pension
+    kind: pension
+    monthly_amount: 3500
+    start_age: 60
+    cola: false
+expect:
+  approved: true
+  ledger_checks:
+  - tool: funded_ratio
+    label: base
+    key: funded_ratio
+    value: 0.257143
+  - tool: net_retirement_spending
+    label: null
+    key: net_spending
+    value: 28000
