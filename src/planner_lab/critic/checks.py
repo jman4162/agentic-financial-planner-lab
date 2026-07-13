@@ -188,6 +188,101 @@ def check_nominal_real_consistent(memo: PlanningMemo, ledger: ComputationLedger)
     )
 
 
+# Dollar amounts ($1,234.56, $1.5M, $39,200/year) and percentages (68.3%).
+_PROSE_DOLLARS = re.compile(
+    r"\$\s?([\d,]+(?:\.\d+)?)\s*(million|M|k|thousand|B|billion)?\b", re.IGNORECASE
+)
+_PROSE_PERCENTS = re.compile(r"\b(\d+(?:\.\d+)?)\s?%")
+
+_SCALE = {
+    None: 1.0,
+    "k": 1e3,
+    "thousand": 1e3,
+    "m": 1e6,
+    "million": 1e6,
+    "b": 1e9,
+    "billion": 1e9,
+}
+
+
+def _known_values(memo: PlanningMemo, ledger: ComputationLedger, case: CaseFile) -> list[float]:
+    """Every number the memo is entitled to mention: ledger outputs, case-file
+    leaves, assumption-set fields, and the memo's own traced numbers."""
+    values: list[float] = []
+    for entry in ledger.entries:
+        for value in entry.outputs.values():
+            if isinstance(value, (int, float)):
+                values.append(float(value))
+    values.extend(_numeric_leaves(case.model_dump(mode="json")))
+    if case.assumptions is not None:
+        for aset in case.assumptions.all_sets():
+            values.extend(
+                [
+                    aset.expected_return_real,
+                    aset.return_volatility,
+                    aset.inflation,
+                    aset.safe_withdrawal_rate,
+                    float(aset.plan_end_age),
+                ]
+            )
+    values.extend(n.value for n in memo.all_traced_numbers())
+    return values
+
+
+def _numeric_leaves(node: object) -> list[float]:
+    if isinstance(node, bool):
+        return []
+    if isinstance(node, (int, float)):
+        return [float(node)]
+    if isinstance(node, dict):
+        return [v for child in node.values() for v in _numeric_leaves(child)]
+    if isinstance(node, list):
+        return [v for child in node for v in _numeric_leaves(child)]
+    return []
+
+
+def _matches_any(value: float, known: list[float], *, rel_tol: float, abs_tol: float) -> bool:
+    return any(math.isclose(value, k, rel_tol=rel_tol, abs_tol=abs_tol) for k in known)
+
+
+def check_prose_numbers(
+    memo: PlanningMemo, ledger: ComputationLedger, case: CaseFile
+) -> CriticCheck:
+    """Dollar and percent figures inside prose must match a known value.
+
+    Prose legitimately rounds ("about $2.3M"), so matching uses a 2% relative
+    tolerance. Percent tokens are compared both as written and divided by 100
+    (ratios are stored as decimals). Bare integers (ages, years, durations) are
+    not scanned; the structured TracedNumber check remains the strict gate.
+    """
+    known = _known_values(memo, ledger, case)
+    known_with_percent_views = known + [k * 100 for k in known if -10 <= k <= 10]
+    failures: list[str] = []
+    for prose in memo.all_prose():
+        for match in _PROSE_DOLLARS.finditer(prose):
+            raw, suffix = match.group(1), match.group(2)
+            value = float(raw.replace(",", "")) * _SCALE[suffix.lower() if suffix else None]
+            if not _matches_any(value, known, rel_tol=0.02, abs_tol=1.0):
+                failures.append(f"{match.group(0)!r} matches no recorded value")
+        for match in _PROSE_PERCENTS.finditer(prose):
+            value = float(match.group(1))
+            if not _matches_any(
+                value, known_with_percent_views, rel_tol=0.02, abs_tol=0.6
+            ) and not _matches_any(value / 100, known, rel_tol=0.02, abs_tol=0.006):
+                failures.append(f"{match.group(0)!r} matches no recorded value")
+    return CriticCheck(
+        check_id="prose_numbers_traceable",
+        passed=not failures,
+        severity="blocker",
+        details=(
+            "all dollar and percent figures in prose match recorded values"
+            if not failures
+            else f"{len(failures)} prose figure(s) match no recorded value"
+        ),
+        evidence=failures,
+    )
+
+
 _IMPERATIVE_ALLOCATION = re.compile(
     r"\b(should|must|need to|recommend(?:ed)?)\b[^.]{0,60}"
     r"\b(allocation|stock share|equity exposure|rebalanc\w+)\b",

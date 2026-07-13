@@ -36,11 +36,12 @@ async def _collect(model: Model, output_model: type[T], prompt: str, system_prom
 
 
 def get_structured(model: Model, output_model: type[T], prompt: str, system_prompt: str) -> T:
-    """Run one structured-output call, with a single retry on validation failure."""
+    """Run one structured-output call, with a single retry on any failure.
+
+    Local models occasionally emit malformed JSON or an empty response; both
+    are worth exactly one retry before surfacing the error.
+    """
     try:
         return asyncio.run(_collect(model, output_model, prompt, system_prompt))
-    except StructuredOutputError:
-        raise
     except Exception:
-        # One retry: local models occasionally emit malformed JSON.
         return asyncio.run(_collect(model, output_model, prompt, system_prompt))

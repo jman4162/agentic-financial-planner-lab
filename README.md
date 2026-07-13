@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/github/license/jman4162/agentic-financial-planner-lab)](LICENSE)
 [![DOI](https://zenodo.org/badge/1296005316.svg)](https://doi.org/10.5281/zenodo.21301713)
 
-An experimental, provider-neutral framework for building auditable personal-finance planning agents: a typed case file, deterministic calculators, a Monte Carlo simulation adapter, cited research through the Model Context Protocol, and a critic gate that blocks any memo whose numbers cannot be traced to a recorded computation.
+An experimental framework for building auditable personal-finance planning agents: a typed case file, deterministic calculators, a Monte Carlo simulation adapter, cited research through the Model Context Protocol, and a critic gate that blocks any memo whose numbers cannot be traced to a recorded computation. No commercial product, account, or specific vendor is required anywhere; the LLM layer runs locally by default (Ollama) with Bedrock as the wired alternative.
 
 **The LLM never does the math.** Every dollar figure in an output memo resolves to a recorded calculator run or a case-file field, and a critic rejects the memo otherwise. This is a research and education project: not a financial advisor, no trade execution, no stock picking, no required account anywhere. Examples use synthetic households only (see the [disclaimer](#license)).
 
@@ -120,7 +120,7 @@ Full walkthroughs with real generated memos, checked in verbatim:
 
 ## Configuration
 
-Everything is configured through environment variables; nothing is hardcoded.
+Runtime configuration is environment-based: model provider, research server, and tracing are selected with environment variables. Modeling defaults (assumption sets, simulation seeds, stress durations) are code with documented rationale; override assumptions per case in the case file.
 
 | Variable | Purpose | Default |
 |---|---|---|

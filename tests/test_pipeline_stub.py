@@ -77,6 +77,35 @@ def failing_findings() -> LLMCriticFindings:
     )
 
 
+class TestStructuredRetry:
+    def test_empty_first_response_retries_once(self) -> None:
+        from typing import Any
+
+        from planner_lab.agents.structured import get_structured
+        from tests.support.stub_model import StubModel
+
+        class FlakyModel(StubModel):
+            def __init__(self, outputs: list[Any]):
+                super().__init__(outputs)
+                self.calls = 0
+
+            async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
+                self.calls += 1
+                if self.calls == 1:
+                    yield {"progress": "no output key on first attempt"}
+                    return
+                async for event in super().structured_output(
+                    output_model, prompt, system_prompt, **kw
+                ):
+                    yield event
+
+        findings = passing_findings()
+        model = FlakyModel([findings])
+        result = get_structured(model, type(findings), "prompt", "system")
+        assert model.calls == 2
+        assert result == findings
+
+
 class TestPipeline:
     def test_happy_path_produces_approved_memo(self) -> None:
         case = make_case(surfaced=False)

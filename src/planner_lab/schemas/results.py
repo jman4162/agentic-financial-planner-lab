@@ -64,11 +64,14 @@ class ComputationLedger(BaseModel):
         if source_id.startswith("ledger:"):
             ref = source_id.removeprefix("ledger:")
             entry_id, sep, key = ref.partition("#")
-            if not sep:
-                return None
             entry = self.get(entry_id)
             if entry is None:
                 return None
+            if not sep:
+                # No output key given: unambiguous only when the entry has
+                # exactly one numeric output.
+                numeric = [v for v in entry.outputs.values() if isinstance(v, (int, float))]
+                return float(numeric[0]) if len(numeric) == 1 else None
             value = entry.outputs.get(key)
             return float(value) if isinstance(value, (int, float)) else None
         if source_id.startswith("case:"):

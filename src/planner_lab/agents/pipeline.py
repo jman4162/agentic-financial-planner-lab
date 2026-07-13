@@ -19,6 +19,8 @@ from planner_lab.agents.memo_writer import write_memo
 from planner_lab.critic import run_critic
 from planner_lab.memo.render import MemoRejectedError
 from planner_lab.protocols import (
+    DEFAULT_N_PATHS,
+    DEFAULT_SEED,
     FinancialHealthMetric,
     PortfolioAnalyticsEngine,
     ResearchSource,
@@ -247,8 +249,8 @@ def run_analysis(
     health_metric: FinancialHealthMetric | None = None,
     portfolio_engine: PortfolioAnalyticsEngine | None = None,
     confirm: ConfirmFn | None = None,
-    n_paths: int = 2000,
-    seed: int = 42,
+    n_paths: int = DEFAULT_N_PATHS,
+    seed: int = DEFAULT_SEED,
     console: Console | None = None,
 ) -> AnalysisResult:
     """Full flow: assumptions -> calculators -> optional simulation -> memo -> critic.

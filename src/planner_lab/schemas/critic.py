@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 CheckId = Literal[
     "numbers_traceable",
+    "prose_numbers_traceable",
     "citations_present",
     "no_securities_advice",
     "nominal_real_consistent",

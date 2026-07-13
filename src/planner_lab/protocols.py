@@ -20,6 +20,10 @@ from planner_lab.schemas.results import (
 )
 
 
+DEFAULT_N_PATHS = 2000
+DEFAULT_SEED = 42
+
+
 @runtime_checkable
 class ScenarioSimulator(Protocol):
     name: str
@@ -29,8 +33,8 @@ class ScenarioSimulator(Protocol):
         case: CaseFile,
         assumptions: AssumptionSet,
         *,
-        n_paths: int = 5000,
-        seed: int = 42,
+        n_paths: int = DEFAULT_N_PATHS,
+        seed: int = DEFAULT_SEED,
         stress_scenarios: Sequence[str] = (),
     ) -> SimulationSummary: ...
 

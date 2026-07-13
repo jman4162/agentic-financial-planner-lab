@@ -155,6 +155,72 @@ class TestEachCheckFailsAlone:
         assert failing_ids(report) == set()
 
 
+class TestProseNumbers:
+    def test_invented_dollar_figure_blocks(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        memo.executive_summary = "You will have roughly $9.9M at retirement."
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == {"prose_numbers_traceable"}
+        assert not report.approved
+
+    def test_invented_percentage_blocks(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        memo.risks.append("There is an 83.7% chance this works out.")
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == {"prose_numbers_traceable"}
+
+    def test_rounded_ledger_value_passes(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        capital = ledger.entries[0].outputs["required_capital"]  # 1,500,000
+        memo.base_case.narrative = (
+            f"The target requires about ${capital / 1e6:.1f}M of capital."
+        )
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == set()
+
+    def test_assumption_rates_in_prose_pass(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        memo.base_case.narrative = (
+            "The base case assumes a 4% real return with 2.5% inflation and a "
+            "4% withdrawal rate."
+        )
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == set()
+
+    def test_case_file_dollars_in_prose_pass(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        memo.risks.append("Current expenses of $88,000 exceed the sustainable level.")
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == set()
+
+    def test_bare_durations_not_scanned(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        memo.base_case.narrative = "Over a 30-year horizon starting at age 62."
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == set()
+
+    def test_ratio_stated_as_percent_passes(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        memo = make_memo(case, ledger)
+        fr = ledger.entries[0].outputs["funded_ratio"]
+        memo.base_case.narrative = f"The plan is about {fr * 100:.0f}% funded."
+        report = run_critic(memo, ledger, case)
+        assert failing_ids(report) == set()
+
+
 class TestLLMChecksMerge:
     def test_llm_findings_appended(self) -> None:
         case = make_case()

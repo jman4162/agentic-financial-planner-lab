@@ -26,6 +26,7 @@ def run_critic(
     """
     results: list[CriticCheck] = [
         checks.check_numbers_traceable(memo, ledger, case),
+        checks.check_prose_numbers(memo, ledger, case),
         checks.check_no_securities_advice(memo),
         checks.check_disclaimer_present(memo),
         checks.check_assumptions_disclosed(memo, case),

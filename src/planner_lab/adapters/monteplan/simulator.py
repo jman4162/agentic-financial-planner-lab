@@ -24,6 +24,7 @@ from monteplan import (
 from monteplan.config.schema import AssetClass, StressScenario
 
 from planner_lab.calculators.conversions import real_to_nominal_rate
+from planner_lab.protocols import DEFAULT_N_PATHS, DEFAULT_SEED
 from planner_lab.schemas.assumptions import AssumptionSet
 from planner_lab.schemas.case_file import CaseFile
 from planner_lab.schemas.results import SimulationSummary
@@ -55,8 +56,8 @@ class MontePlanSimulator:
         case: CaseFile,
         assumptions: AssumptionSet,
         *,
-        n_paths: int = 5000,
-        seed: int = 42,
+        n_paths: int = DEFAULT_N_PATHS,
+        seed: int = DEFAULT_SEED,
         stress_scenarios: Sequence[str] = (),
     ) -> SimulationSummary:
         plan = _build_plan(case, assumptions)

@@ -23,9 +23,16 @@ class TestLedgerResolve:
         case = make_case()
         ledger = make_ledger(case)
         assert ledger.resolve("ledger:calc:nope:0001#x", case) is None
-        assert ledger.resolve("ledger:missing-fragment", case) is None
         assert ledger.resolve("case:not.a.path", case) is None
         assert ledger.resolve("unknown:scheme", case) is None
+        # Fragment-less ref to a multi-output entry is ambiguous.
+        assert ledger.resolve(f"ledger:{ledger.entries[0].entry_id}", case) is None
+
+    def test_fragmentless_ref_resolves_single_output_entry(self) -> None:
+        case = make_case()
+        ledger = make_ledger(case)
+        entry_id = ledger.add("sustainable_spending", {}, {"sustainable_spending": 34_800.0})
+        assert ledger.resolve(f"ledger:{entry_id}", case) == 34_800.0
 
     def test_entry_ids_are_sequential_and_kinded(self) -> None:
         case = make_case()

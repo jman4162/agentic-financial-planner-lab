@@ -133,16 +133,20 @@ def build_planner_tools(state: RunState) -> list[Any]:
         Args:
             assumptions_label: "base", "conservative", or "optimistic".
         """
+        from planner_lab.protocols import DEFAULT_N_PATHS, DEFAULT_SEED
+
         assert state.case.assumptions is not None  # guarded by compliance hook
         aset = state.case.assumptions.get(assumptions_label)
-        summary = get_simulator().simulate(state.case, aset, n_paths=2000, seed=42)
+        summary = get_simulator().simulate(
+            state.case, aset, n_paths=DEFAULT_N_PATHS, seed=DEFAULT_SEED
+        )
         outputs: dict[str, Any] = {
             "success_probability": summary.success_probability,
             **{f"terminal_wealth_{k}": v for k, v in summary.terminal_wealth_percentiles.items()},
         }
         entry_id = state.ledger.add(
             "run_simulation",
-            {"assumptions_label": assumptions_label, "n_paths": 2000, "seed": 42},
+            {"assumptions_label": assumptions_label, "n_paths": DEFAULT_N_PATHS, "seed": DEFAULT_SEED},
             outputs,
             assumptions_label=assumptions_label,
             kind="sim",
