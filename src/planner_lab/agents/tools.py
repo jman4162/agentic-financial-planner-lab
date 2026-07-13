@@ -44,7 +44,7 @@ def build_planner_tools(state: RunState) -> list[Any]:
             annual_spending: Target annual retirement spending in today's dollars.
             withdrawal_rate: Withdrawal rate as a decimal; omit for the 4% default.
         """
-        portfolio = state.case.balance_sheet.investable_assets
+        portfolio = state.case.balance_sheet.retirement_investable_assets
         result = calculators.funded_ratio(portfolio, annual_spending, withdrawal_rate)
         entry_id = state.ledger.add(
             "funded_ratio",
@@ -68,7 +68,7 @@ def build_planner_tools(state: RunState) -> list[Any]:
             real_return: Expected real (after-inflation) return, decimal.
             withdrawal_rate: Withdrawal rate as a decimal.
         """
-        portfolio = state.case.balance_sheet.investable_assets
+        portfolio = state.case.balance_sheet.retirement_investable_assets
         savings = state.case.cash_flow.effective_savings()
         if savings is None:
             savings = state.case.balance_sheet.annual_contributions
@@ -96,7 +96,7 @@ def build_planner_tools(state: RunState) -> list[Any]:
         Args:
             withdrawal_rate: Withdrawal rate as a decimal; omit for the 4% default.
         """
-        portfolio = state.case.balance_sheet.investable_assets
+        portfolio = state.case.balance_sheet.retirement_investable_assets
         value = calculators.sustainable_spending(portfolio, withdrawal_rate)
         entry_id = state.ledger.add(
             "sustainable_spending",
@@ -146,7 +146,11 @@ def build_planner_tools(state: RunState) -> list[Any]:
         }
         entry_id = state.ledger.add(
             "run_simulation",
-            {"assumptions_label": assumptions_label, "n_paths": DEFAULT_N_PATHS, "seed": DEFAULT_SEED},
+            {
+                "assumptions_label": assumptions_label,
+                "n_paths": DEFAULT_N_PATHS,
+                "seed": DEFAULT_SEED,
+            },
             outputs,
             assumptions_label=assumptions_label,
             kind="sim",

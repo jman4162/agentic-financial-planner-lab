@@ -154,6 +154,23 @@ def analyze(
     allocation: Annotated[
         bool, typer.Option("--allocation", help="Run lifecycle allocation diagnostics")
     ] = False,
+    ss_comparison: Annotated[
+        bool,
+        typer.Option("--ss-comparison", help="Compare Social Security claiming ages 62/67/70"),
+    ] = False,
+    spending_policy: Annotated[
+        str,
+        typer.Option(
+            help="Simulation spending policy: constant_real|guardrails|vpw|floor_ceiling|percent_of_portfolio"
+        ),
+    ] = "constant_real",
+    compare_spending_policies: Annotated[
+        bool,
+        typer.Option("--compare-spending-policies", help="Simulate every spending policy"),
+    ] = False,
+    sensitivity: Annotated[
+        bool, typer.Option("--sensitivity", help="Which assumptions move the outcome most")
+    ] = False,
     trace: Annotated[bool, typer.Option(help="Print OpenTelemetry spans to stdout")] = False,
 ) -> None:
     """Run the analysis pipeline and print the memo summary and critic report."""
@@ -164,17 +181,28 @@ def analyze(
         setup_telemetry("console")
     case = load_case(case_path)
     metric, engine = _load_optional_adapters(health, allocation)
-    result = pipeline.run_analysis(
-        case,
-        simulate=simulate,
-        research_source=_research_source_from_env(research),
-        health_metric=metric,
-        portfolio_engine=engine,
-        confirm=_confirm_fn(yes),
-        n_paths=n_paths,
-        seed=seed,
-        console=console,
-    )
+    from planner_lab.memo.render import MemoRejectedError
+
+    try:
+        result = pipeline.run_analysis(
+            case,
+            simulate=simulate,
+            spending_policy=spending_policy,
+            compare_spending_policies=compare_spending_policies,
+            sensitivity=sensitivity,
+            ss_comparison=ss_comparison,
+            research_source=_research_source_from_env(research),
+            health_metric=metric,
+            portfolio_engine=engine,
+            confirm=_confirm_fn(yes),
+            n_paths=n_paths,
+            seed=seed,
+            console=console,
+        )
+    except MemoRejectedError as e:
+        console.print("[red]Memo rejected by the critic after one revision:[/red]")
+        _print_report(e.report)
+        raise typer.Exit(1) from e
     console.print(f"\n[bold]Executive summary[/bold]\n{result.memo.executive_summary}")
     for number in result.memo.all_traced_numbers():
         console.print(f"  {number.label}: {number.value} (source: {number.source_id})")
@@ -200,6 +228,23 @@ def memo(
     allocation: Annotated[
         bool, typer.Option("--allocation", help="Run lifecycle allocation diagnostics")
     ] = False,
+    ss_comparison: Annotated[
+        bool,
+        typer.Option("--ss-comparison", help="Compare Social Security claiming ages 62/67/70"),
+    ] = False,
+    spending_policy: Annotated[
+        str,
+        typer.Option(
+            help="Simulation spending policy: constant_real|guardrails|vpw|floor_ceiling|percent_of_portfolio"
+        ),
+    ] = "constant_real",
+    compare_spending_policies: Annotated[
+        bool,
+        typer.Option("--compare-spending-policies", help="Simulate every spending policy"),
+    ] = False,
+    sensitivity: Annotated[
+        bool, typer.Option("--sensitivity", help="Which assumptions move the outcome most")
+    ] = False,
 ) -> None:
     """Run the pipeline and write a critic-approved markdown memo plus an audit sidecar."""
     from planner_lab.memo.render import MemoRejectedError, render_markdown
@@ -211,6 +256,10 @@ def memo(
         result = pipeline.run_analysis(
             case,
             simulate=simulate,
+            spending_policy=spending_policy,
+            compare_spending_policies=compare_spending_policies,
+            sensitivity=sensitivity,
+            ss_comparison=ss_comparison,
             research_source=_research_source_from_env(research),
             health_metric=metric,
             portfolio_engine=engine,

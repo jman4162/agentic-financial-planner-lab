@@ -27,7 +27,12 @@ You write educational financial planning memos. Hard rules:
   exactly, each with its given source_id.
 - Every dollar amount and percentage you write in prose sentences must also be
   copied from the number menu or the assumption sets. Never derive new figures
-  (no computed differences, shares of a total, or per-month conversions).
+  (no computed differences, shares of a total, or per-month conversions). If a
+  comparison matters, state the two menu numbers side by side instead of the
+  computed gap.
+- When a simulation success probability is 100%, write "all simulated paths
+  succeeded under these assumptions"; never present any probability as a
+  guarantee of outcomes.
 - Never recommend buying or selling any specific security, fund, or ticker.
 - Never use absolute-certainty language (guaranteed, risk-free, certainly will).
 - State clearly that outcomes depend on assumptions.
@@ -67,6 +72,10 @@ def _number_menu(case: CaseFile, ledger: ComputationLedger) -> str:
         f"- source_id=case:balance_sheet.investable_assets "
         f"value={case.balance_sheet.investable_assets}"
     )
+    lines.append(
+        f"- source_id=case:balance_sheet.retirement_investable_assets "
+        f"value={case.balance_sheet.retirement_investable_assets}"
+    )
     lines.append(f"- source_id=case:balance_sheet.net_worth value={case.balance_sheet.net_worth}")
     for field in ("annual_expenses", "annual_savings", "annual_gross_income"):
         value = getattr(case.cash_flow, field)
@@ -83,6 +92,12 @@ def _number_menu(case: CaseFile, ledger: ComputationLedger) -> str:
             lines.append(
                 f"- source_id=case:goals.{i}.annual_amount_today value={goal.annual_amount_today}"
             )
+    for i, stream in enumerate(case.income_streams):
+        lines.append(
+            f"- source_id=case:income_streams.{i}.monthly_amount "
+            f"value={stream.monthly_amount} ({stream.name}, monthly, from age "
+            f"{stream.start_age})"
+        )
     return "\n".join(lines)
 
 
@@ -123,6 +138,36 @@ def _build_prompt(
         "as given. missing_data must include every entry from the case file's",
         f"missing_fields list: {case.missing_fields}.",
     ]
+    if any(e.tool_name == "net_retirement_spending" for e in ledger.entries):
+        sections += [
+            "",
+            "Guaranteed income (Social Security or pensions) is recorded. Present",
+            "both the gross funded ratio and the net-of-income funded ratio, and",
+            "explain that guaranteed income covers part of the spending target.",
+        ]
+    if any(e.tool_name == "spending_policy_comparison" for e in ledger.entries):
+        sections += [
+            "",
+            "A spending-policy comparison is in the menu (constant-real, guardrails,",
+            "VPW, floor-ceiling, percent-of-portfolio). Present it as a trade-off:",
+            "dynamic policies raise portfolio survival by varying annual income.",
+            "Never declare one policy correct for the household.",
+        ]
+    if any(e.tool_name == "sensitivity_analysis" for e in ledger.entries):
+        sections += [
+            "",
+            "Sensitivity impacts are in the menu (success-probability change from a",
+            "10% perturbation of each parameter). Name the one or two largest",
+            "impacts in the risks section.",
+        ]
+    if any(e.tool_name == "ss_claiming_comparison" for e in ledger.entries):
+        sections += [
+            "",
+            "A Social Security claiming-age comparison is in the menu (ages 62, 67,",
+            "70). Present it as a table of trade-offs in the stress or trade_offs",
+            "section. Never advise a specific claiming age; note the factors are",
+            "SSA-style approximations relative to a full retirement age of 67.",
+        ]
     if any(e.entry_id.startswith("metric:") for e in ledger.entries):
         sections += [
             "",

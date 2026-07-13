@@ -21,9 +21,12 @@ from planner_lab.memo.render import MemoRejectedError
 from planner_lab.protocols import (
     DEFAULT_N_PATHS,
     DEFAULT_SEED,
+    SPENDING_POLICIES,
     FinancialHealthMetric,
     PortfolioAnalyticsEngine,
     ResearchSource,
+    SensitivityAnalyzer,
+    SpendingPolicy,
 )
 from planner_lab.schemas.assumptions import AssumptionsBundle, default_assumptions
 from planner_lab.schemas.case_file import CaseFile
@@ -81,11 +84,15 @@ def surface_assumptions(case: CaseFile, confirm: ConfirmFn, console: Console | N
 
 def _run_calculators(case: CaseFile, ledger: ComputationLedger) -> None:
     assert case.assumptions is not None
-    portfolio = case.balance_sheet.investable_assets
+    portfolio = case.balance_sheet.retirement_investable_assets
     spending = case.retirement_spending_target()
     savings = case.cash_flow.effective_savings()
     if savings is None:
         savings = case.balance_sheet.annual_contributions
+
+    retirement_age = case.earliest_retirement_age()
+    guaranteed_income = case.guaranteed_income_at_age(retirement_age)
+    net_spending = case.net_retirement_spending(retirement_age)
 
     for aset in case.assumptions.all_sets():
         if spending is None:
@@ -98,6 +105,18 @@ def _run_calculators(case: CaseFile, ledger: ComputationLedger) -> None:
             fr,
             assumptions_label=aset.label,
         )
+        if guaranteed_income > 0 and net_spending is not None and net_spending > 0:
+            fr_net = calculators.funded_ratio(portfolio, net_spending, rate)
+            ledger.add(
+                "funded_ratio_net_of_income",
+                {
+                    "portfolio_value": portfolio,
+                    "net_annual_spending": net_spending,
+                    "withdrawal_rate": rate,
+                },
+                fr_net,
+                assumptions_label=aset.label,
+            )
         years = calculators.years_to_fi(
             portfolio, savings, spending, aset.expected_return_real, rate
         )
@@ -121,14 +140,37 @@ def _run_calculators(case: CaseFile, ledger: ComputationLedger) -> None:
             assumptions_label=aset.label,
         )
 
+    if spending is not None and guaranteed_income > 0 and net_spending is not None:
+        ledger.add(
+            "net_retirement_spending",
+            {"gross_spending": spending, "at_age": retirement_age},
+            {
+                "guaranteed_income": guaranteed_income,
+                "net_spending": net_spending,
+                "gross_spending": spending,
+            },
+        )
 
-def _run_simulations(case: CaseFile, ledger: ComputationLedger, *, n_paths: int, seed: int) -> None:
+
+def _run_simulations(
+    case: CaseFile,
+    ledger: ComputationLedger,
+    *,
+    n_paths: int,
+    seed: int,
+    spending_policy: SpendingPolicy = "constant_real",
+) -> None:
     assert case.assumptions is not None
     simulator = get_simulator()
     for aset in case.assumptions.all_sets():
         stress = _BASE_STRESS_SCENARIOS if aset.label == "base" else ()
         summary = simulator.simulate(
-            case, aset, n_paths=n_paths, seed=seed, stress_scenarios=stress
+            case,
+            aset,
+            n_paths=n_paths,
+            seed=seed,
+            stress_scenarios=stress,
+            spending_policy=spending_policy,
         )
         outputs: dict[str, float | int | str] = {
             "success_probability": summary.success_probability,
@@ -146,12 +188,54 @@ def _run_simulations(case: CaseFile, ledger: ComputationLedger, *, n_paths: int,
                 "n_paths": n_paths,
                 "seed": seed,
                 "stress_scenarios": list(stress),
+                "spending_policy": spending_policy,
             },
             outputs,
             assumptions_label=aset.label,
             adapter=simulator.name,
             kind="sim",
         )
+
+
+def _run_policy_comparison(
+    case: CaseFile, ledger: ComputationLedger, *, n_paths: int, seed: int
+) -> None:
+    """Simulate the base set once per spending policy. Comparison only: dynamic
+    policies trade income stability for portfolio survival, and the memo should
+    present that trade-off rather than pick a winner."""
+    assert case.assumptions is not None
+    simulator = get_simulator()
+    base = case.assumptions.base
+    for policy in SPENDING_POLICIES:
+        summary = simulator.simulate(case, base, n_paths=n_paths, seed=seed, spending_policy=policy)
+        ledger.add(
+            "spending_policy_comparison",
+            {"spending_policy": policy, "n_paths": n_paths, "seed": seed},
+            {
+                "spending_policy": policy,
+                "success_probability": summary.success_probability,
+                "terminal_wealth_p50": summary.terminal_wealth_percentiles.get("p50", 0.0),
+            },
+            assumptions_label=base.label,
+            adapter=simulator.name,
+            kind="sim",
+        )
+
+
+def _run_sensitivity(case: CaseFile, ledger: ComputationLedger, *, n_paths: int, seed: int) -> None:
+    assert case.assumptions is not None
+    simulator = get_simulator()
+    if not isinstance(simulator, SensitivityAnalyzer):
+        raise RuntimeError(f"simulator {simulator.name!r} does not support sensitivity analysis")
+    impacts = simulator.analyze_sensitivity(case, case.assumptions.base, n_paths=n_paths, seed=seed)
+    ledger.add(
+        "sensitivity_analysis",
+        {"perturbation": "10% per parameter", "n_paths": n_paths, "seed": seed},
+        {f"impact_{name}": impact for name, impact in impacts.items()},
+        assumptions_label="base",
+        adapter=simulator.name,
+        kind="sim",
+    )
 
 
 def _run_health_metric(
@@ -202,6 +286,60 @@ def _run_portfolio_diagnostics(
     )
 
 
+# SSA-style claiming factors relative to a full retirement age of 67; v1
+# approximation for the comparison table, documented in the memo methodology.
+_SS_CLAIMING_FACTORS = {
+    62: 0.70,
+    63: 0.75,
+    64: 0.80,
+    65: 0.867,
+    66: 0.933,
+    67: 1.0,
+    68: 1.08,
+    69: 1.16,
+    70: 1.24,
+}
+_SS_COMPARISON_AGES = (62, 67, 70)
+
+
+def _run_ss_comparison(
+    case: CaseFile, ledger: ComputationLedger, *, n_paths: int, seed: int
+) -> None:
+    """Simulate the base assumption set once per Social Security claiming age,
+    scaling every SS stream's benefit by the SSA-style factor relative to its
+    stated start age. Comparison only; the memo must not advise a claiming age."""
+    assert case.assumptions is not None
+    ss_streams = [s for s in case.income_streams if s.kind == "social_security"]
+    if not ss_streams:
+        return
+    simulator = get_simulator()
+    base = case.assumptions.base
+    for claiming_age in _SS_COMPARISON_AGES:
+        variant = case.model_copy(deep=True)
+        scaled_total_monthly = 0.0
+        for stream in variant.income_streams:
+            if stream.kind != "social_security":
+                continue
+            stated = min(max(stream.start_age, 62), 70)
+            factor = _SS_CLAIMING_FACTORS[claiming_age] / _SS_CLAIMING_FACTORS[stated]
+            stream.monthly_amount = stream.monthly_amount * factor
+            stream.start_age = claiming_age
+            scaled_total_monthly += stream.monthly_amount
+        summary = simulator.simulate(variant, base, n_paths=n_paths, seed=seed)
+        ledger.add(
+            "ss_claiming_comparison",
+            {"claiming_age": claiming_age, "n_paths": n_paths, "seed": seed},
+            {
+                "claiming_age": claiming_age,
+                "monthly_benefit_total": round(scaled_total_monthly, 2),
+                "success_probability": summary.success_probability,
+            },
+            assumptions_label=base.label,
+            adapter=simulator.name,
+            kind="sim",
+        )
+
+
 def _run_research(
     case: CaseFile,
     ledger: ComputationLedger,
@@ -245,6 +383,10 @@ def run_analysis(
     *,
     model: Model | None = None,
     simulate: bool = False,
+    spending_policy: SpendingPolicy = "constant_real",
+    compare_spending_policies: bool = False,
+    sensitivity: bool = False,
+    ss_comparison: bool = False,
     research_source: ResearchSource | None = None,
     health_metric: FinancialHealthMetric | None = None,
     portfolio_engine: PortfolioAnalyticsEngine | None = None,
@@ -270,7 +412,13 @@ def run_analysis(
     ledger = ComputationLedger(case_id=case.case_id)
     _run_calculators(case, ledger)
     if simulate:
-        _run_simulations(case, ledger, n_paths=n_paths, seed=seed)
+        _run_simulations(case, ledger, n_paths=n_paths, seed=seed, spending_policy=spending_policy)
+    if compare_spending_policies:
+        _run_policy_comparison(case, ledger, n_paths=n_paths, seed=seed)
+    if sensitivity:
+        _run_sensitivity(case, ledger, n_paths=n_paths, seed=seed)
+    if ss_comparison:
+        _run_ss_comparison(case, ledger, n_paths=n_paths, seed=seed)
     if health_metric is not None:
         _run_health_metric(case, ledger, health_metric)
     if portfolio_engine is not None:

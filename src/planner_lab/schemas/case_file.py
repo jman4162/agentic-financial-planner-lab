@@ -66,6 +66,12 @@ class BalanceSheet(BaseModel):
         return sum(a.balance for a in self.accounts if a.account_type != "cash")
 
     @property
+    def retirement_investable_assets(self) -> Money:
+        """Assets available for retirement: excludes cash and education accounts
+        (a 529 exists to fund the education goal, not retirement)."""
+        return sum(a.balance for a in self.accounts if a.account_type not in ("cash", "education"))
+
+    @property
     def total_assets(self) -> Money:
         return sum(a.balance for a in self.accounts)
 
@@ -112,6 +118,19 @@ class Portfolio(BaseModel):
         return self
 
 
+class IncomeStream(BaseModel):
+    """Guaranteed income in today's dollars: Social Security, pensions, annuities."""
+
+    stream_id: str
+    name: str
+    kind: Literal["social_security", "pension", "annuity", "other"]
+    monthly_amount: Money = Field(gt=0)
+    start_age: int = Field(ge=50, le=100)
+    end_age: int | None = Field(default=None, ge=50, le=120)
+    cola: bool = True
+    person_index: int = Field(default=0, ge=0)
+
+
 class Constraints(BaseModel):
     liquidity_floor: Money | None = Field(default=None, ge=0)
     exclusions: str | None = None
@@ -127,6 +146,7 @@ class CaseFile(BaseModel):
     balance_sheet: BalanceSheet = BalanceSheet()
     cash_flow: CashFlow = CashFlow()
     portfolio: Portfolio | None = None
+    income_streams: list[IncomeStream] = []
     assumptions: "AssumptionsBundle | None" = None
     constraints: Constraints = Constraints()
     missing_fields: list[str] = []
@@ -138,6 +158,40 @@ class CaseFile(BaseModel):
             if goal.kind == "retirement" and goal.annual_amount_today is not None:
                 return goal.annual_amount_today
         return self.cash_flow.annual_expenses
+
+    def earliest_retirement_age(self, default: int = 65) -> int:
+        """The household plan starts when the first person retires."""
+        ages = [
+            p.planned_retirement_age
+            for p in self.household.persons
+            if p.planned_retirement_age is not None
+        ]
+        return min(ages) if ages else default
+
+    def guaranteed_income_at_age(self, age: int) -> Money:
+        """Annual guaranteed income (today's dollars) active at the primary
+        person's given age. Streams belong to a person; their activity is
+        evaluated against that person's own age at the same calendar time."""
+        primary = self.household.persons[0]
+        year = primary.birth_year + age
+        total = 0.0
+        for stream in self.income_streams:
+            if stream.person_index >= len(self.household.persons):
+                continue
+            person = self.household.persons[stream.person_index]
+            person_age = person.age_in(year)
+            if person_age >= stream.start_age and (
+                stream.end_age is None or person_age < stream.end_age
+            ):
+                total += stream.monthly_amount * 12
+        return total
+
+    def net_retirement_spending(self, at_age: int) -> Money | None:
+        """Spending target minus guaranteed income active at that age, floor 0."""
+        target = self.retirement_spending_target()
+        if target is None:
+            return None
+        return max(target - self.guaranteed_income_at_age(at_age), 0.0)
 
     _AUTO_MISSING = frozenset(
         {

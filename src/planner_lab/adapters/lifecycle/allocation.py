@@ -35,7 +35,7 @@ class LifecycleAllocationEngine:
         retirement_age = person.planned_retirement_age or 65
         if retirement_age <= age:
             retirement_age = age + 1
-        wealth = case.balance_sheet.investable_assets
+        wealth = case.balance_sheet.retirement_investable_assets
         if wealth <= 0:
             raise ValueError("lifecycle allocation needs investable assets > 0")
 

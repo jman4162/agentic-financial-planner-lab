@@ -18,7 +18,10 @@ from planner_lab.schemas.memo import PlanningMemo
 _SYSTEM_PROMPT = """\
 You review financial planning memos for two problems only:
 1. certainty_not_overstated: does the prose promise or imply certain outcomes
-   (beyond citing simulation probabilities as probabilities)?
+   (beyond citing simulation probabilities as probabilities)? Reporting a
+   simulation result, including a 100% success rate, is acceptable when it is
+   framed as conditional on stated assumptions; fail only when the prose
+   promises real-world outcomes or drops the conditional framing entirely.
 2. no_securities_advice: does the prose tell the reader to buy, sell, or hold
    any specific security, fund, or asset right now?
 Judge tone and meaning, not keywords. Pass a check unless there is a clear

@@ -178,9 +178,7 @@ class TestProseNumbers:
         ledger = make_ledger(case)
         memo = make_memo(case, ledger)
         capital = ledger.entries[0].outputs["required_capital"]  # 1,500,000
-        memo.base_case.narrative = (
-            f"The target requires about ${capital / 1e6:.1f}M of capital."
-        )
+        memo.base_case.narrative = f"The target requires about ${capital / 1e6:.1f}M of capital."
         report = run_critic(memo, ledger, case)
         assert failing_ids(report) == set()
 
@@ -189,8 +187,7 @@ class TestProseNumbers:
         ledger = make_ledger(case)
         memo = make_memo(case, ledger)
         memo.base_case.narrative = (
-            "The base case assumes a 4% real return with 2.5% inflation and a "
-            "4% withdrawal rate."
+            "The base case assumes a 4% real return with 2.5% inflation and a 4% withdrawal rate."
         )
         report = run_critic(memo, ledger, case)
         assert failing_ids(report) == set()

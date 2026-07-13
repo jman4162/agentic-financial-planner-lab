@@ -80,6 +80,43 @@ def _build_assets(case: CaseFile) -> list[Asset]:
     return assets
 
 
+def _retirement_spending_segments(
+    case: CaseFile, current_age: int, retirement_age: int, plan_end_age: int
+) -> list[tuple[int, int | None, float]]:
+    """Split retirement spending into (start_year, end_year, net_annual) segments,
+    netting out guaranteed income as streams start and stop. compute_cefr does not
+    consume income directly, so income enters as reduced spending. All streams are
+    treated as real-constant (today's dollars); v1 ignores fixed-nominal erosion."""
+    target = case.retirement_spending_target()
+    assert target is not None
+    boundaries = {retirement_age}
+    primary = case.household.persons[0]
+    for stream in case.income_streams:
+        if stream.person_index >= len(case.household.persons):
+            continue
+        owner = case.household.persons[stream.person_index]
+        offset = owner.birth_year - primary.birth_year
+        for age in (stream.start_age, stream.end_age):
+            if age is not None and retirement_age <= age + offset <= plan_end_age:
+                boundaries.add(age + offset)
+    ordered = sorted(boundaries)
+    segments: list[tuple[int, int | None, float]] = []
+    for start_age, end_age in zip(ordered, ordered[1:] + [None]):
+        if end_age is not None and end_age <= start_age:
+            continue
+        net = max(target - case.guaranteed_income_at_age(start_age), 0.0)
+        if net <= 0:
+            continue
+        segments.append(
+            (
+                start_age - current_age,
+                end_age - current_age if end_age is not None else None,
+                net,
+            )
+        )
+    return segments
+
+
 def _build_liabilities(case: CaseFile, current_age: int, retirement_age: int) -> list[Liability]:
     target = case.retirement_spending_target()
     if target is None:
@@ -87,16 +124,40 @@ def _build_liabilities(case: CaseFile, current_age: int, retirement_age: int) ->
             "case file has no retirement spending target: set "
             "goals[kind=retirement].annual_amount_today or cash_flow.annual_expenses"
         )
+    plan_end_age = 95
+    if case.assumptions is not None:
+        plan_end_age = case.assumptions.base.plan_end_age
     liabilities = [
         Liability(
-            name="retirement_spending",
+            name=f"retirement_spending_{start_year}",
             liability_type=LiabilityType.ESSENTIAL_SPENDING,
-            annual_amount=target,
-            start_year=max(retirement_age - current_age, 0),
-            end_year=None,
+            annual_amount=net,
+            start_year=max(start_year, 0),
+            end_year=end_year,
             inflation_linkage=InflationLinkage.CPI,
         )
+        for start_year, end_year, net in _retirement_spending_segments(
+            case, current_age, retirement_age, plan_end_age
+        )
     ]
+    current_year = case.created.year
+    for goal in case.goals:
+        if goal.kind not in ("education", "purchase"):
+            continue
+        if goal.annual_amount_today is None or goal.target_year is None:
+            continue
+        start_year = max(goal.target_year - current_year, 0)
+        duration = 4 if goal.kind == "education" else 1
+        liabilities.append(
+            Liability(
+                name=f"{goal.kind}:{goal.goal_id}",
+                liability_type=LiabilityType.DISCRETIONARY_SPENDING,
+                annual_amount=goal.annual_amount_today,
+                start_year=start_year,
+                end_year=start_year + duration,
+                inflation_linkage=InflationLinkage.CPI,
+            )
+        )
     for debt in case.balance_sheet.liabilities:
         if debt.balance <= 0:
             continue
@@ -140,7 +201,7 @@ def _build_household(case: CaseFile, assumptions: AssumptionSet) -> Household:
         )
     first = case.household.persons[0]
     current_age = first.age_in(current_year)
-    retirement_age = first.planned_retirement_age or 65
+    retirement_age = case.earliest_retirement_age()
     return Household(
         members=members,
         balance_sheet=BalanceSheet(assets=_build_assets(case)),

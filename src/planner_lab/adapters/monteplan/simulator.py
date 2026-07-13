@@ -14,6 +14,8 @@ from collections.abc import Sequence
 
 from monteplan import (
     AccountConfig,
+    DiscreteEvent,
+    GuaranteedIncomeStream,
     MarketAssumptions,
     PlanConfig,
     PolicyBundle,
@@ -24,7 +26,7 @@ from monteplan import (
 from monteplan.config.schema import AssetClass, StressScenario
 
 from planner_lab.calculators.conversions import real_to_nominal_rate
-from planner_lab.protocols import DEFAULT_N_PATHS, DEFAULT_SEED
+from planner_lab.protocols import DEFAULT_N_PATHS, DEFAULT_SEED, SpendingPolicy
 from planner_lab.schemas.assumptions import AssumptionSet
 from planner_lab.schemas.case_file import CaseFile
 from planner_lab.schemas.results import SimulationSummary
@@ -59,12 +61,13 @@ class MontePlanSimulator:
         n_paths: int = DEFAULT_N_PATHS,
         seed: int = DEFAULT_SEED,
         stress_scenarios: Sequence[str] = (),
+        spending_policy: SpendingPolicy = "constant_real",
     ) -> SimulationSummary:
         plan = _build_plan(case, assumptions)
         market = _build_market(case, assumptions)
         policies = PolicyBundle(
             spending=SpendingPolicyConfig(
-                policy_type="constant_real",
+                policy_type=spending_policy,
                 withdrawal_rate=assumptions.safe_withdrawal_rate,
             )
         )
@@ -106,8 +109,34 @@ class MontePlanSimulator:
                 "engine_version": base.engine_version,
                 "config_hash": base.config_hash,
                 "return_basis": "nominal returns derived from real assumption via Fisher",
+                "spending_policy": spending_policy,
+                "market_model": "multi_asset" if len(market.assets) > 1 else "blended",
             },
         )
+
+    def analyze_sensitivity(
+        self,
+        case: CaseFile,
+        assumptions: AssumptionSet,
+        *,
+        n_paths: int = DEFAULT_N_PATHS,
+        seed: int = DEFAULT_SEED,
+    ) -> dict[str, float]:
+        """Success-probability impact of perturbing each plan parameter by 10%."""
+        from monteplan.analytics.sensitivity import run_sensitivity
+
+        plan = _build_plan(case, assumptions)
+        market = _build_market(case, assumptions)
+        policies = PolicyBundle(
+            spending=SpendingPolicyConfig(
+                policy_type="constant_real",
+                withdrawal_rate=assumptions.safe_withdrawal_rate,
+            )
+        )
+        report = run_sensitivity(
+            plan, market, policies, SimulationConfig(n_paths=n_paths, seed=seed)
+        )
+        return {r.parameter_name: r.impact for r in report.results}
 
 
 def _retirement_spending(case: CaseFile) -> float:
@@ -123,7 +152,7 @@ def _retirement_spending(case: CaseFile) -> float:
 def _build_plan(case: CaseFile, assumptions: AssumptionSet) -> PlanConfig:
     person = case.household.persons[0]
     current_age = person.age_in(case.created.year)
-    retirement_age = person.planned_retirement_age or 65
+    retirement_age = case.earliest_retirement_age()
     if retirement_age <= current_age:
         retirement_age = current_age + 1
 
@@ -135,6 +164,48 @@ def _build_plan(case: CaseFile, assumptions: AssumptionSet) -> PlanConfig:
         )
         for account in case.balance_sheet.accounts
     ]
+    # Stream ages are per-person; monteplan tracks the primary person's age, so
+    # translate each stream's start/end to the primary's age at the same time.
+    # monteplan already indexes stream amounts by cumulative inflation, so
+    # cola_rate=0 means inflation-indexed (right for Social Security). Fixed-
+    # nominal streams (cola=False) are approximated the same way in v1, which
+    # slightly overstates their late-plan real value; negative real growth is
+    # not accepted by the engine.
+    income = []
+    for stream in case.income_streams:
+        if stream.person_index >= len(case.household.persons):
+            continue
+        owner = case.household.persons[stream.person_index]
+        offset = owner.birth_year - person.birth_year
+        income.append(
+            GuaranteedIncomeStream(
+                name=stream.name,
+                monthly_amount=stream.monthly_amount,
+                start_age=stream.start_age + offset,
+                cola_rate=0.0,
+                end_age=stream.end_age + offset if stream.end_age is not None else None,
+            )
+        )
+    # Education goals draw over four years, purchases in one; both become
+    # outflow events at the primary person's age in the goal's target year.
+    events = []
+    for goal in case.goals:
+        if goal.kind not in ("education", "purchase"):
+            continue
+        if goal.annual_amount_today is None or goal.target_year is None:
+            continue
+        duration = 4 if goal.kind == "education" else 1
+        for offset_years in range(duration):
+            event_age = person.age_in(goal.target_year) + offset_years
+            if current_age < event_age <= assumptions.plan_end_age:
+                events.append(
+                    DiscreteEvent(
+                        age=event_age,
+                        amount=-goal.annual_amount_today,
+                        description=f"{goal.kind}:{goal.goal_id}",
+                    )
+                )
+
     take_home = case.cash_flow.annual_take_home or 0.0
     return PlanConfig(
         current_age=current_age,
@@ -143,14 +214,62 @@ def _build_plan(case: CaseFile, assumptions: AssumptionSet) -> PlanConfig:
         accounts=accounts,
         monthly_income=take_home / 12,
         monthly_spending=_retirement_spending(case) / 12,
+        guaranteed_income=income,
+        discrete_events=events,
     )
 
 
 def _build_market(case: CaseFile, assumptions: AssumptionSet) -> MarketAssumptions:
-    nominal_return = real_to_nominal_rate(assumptions.expected_return_real, assumptions.inflation)
     expense_ratio = 0.0
     if case.portfolio is not None and case.portfolio.weighted_expense_ratio is not None:
         expense_ratio = case.portfolio.weighted_expense_ratio
+
+    portfolio = case.portfolio
+    if portfolio is not None and assumptions.has_asset_classes():
+        # Correlated stocks/bonds/cash at the case's portfolio weights.
+        assert assumptions.stock_return_real is not None  # has_asset_classes
+        assert assumptions.bond_return_real is not None
+        assert assumptions.stock_volatility is not None
+        assert assumptions.bond_volatility is not None
+        classes = [
+            (
+                "Stocks",
+                portfolio.stock_pct,
+                assumptions.stock_return_real,
+                assumptions.stock_volatility,
+            ),
+            (
+                "Bonds",
+                portfolio.bond_pct,
+                assumptions.bond_return_real,
+                assumptions.bond_volatility,
+            ),
+            ("Cash", portfolio.cash_pct, 0.0, 0.01),
+        ]
+        kept = [(n, w, r, v) for n, w, r, v in classes if w > 0]
+        corr_full = {
+            ("Stocks", "Bonds"): assumptions.stock_bond_correlation,
+            ("Stocks", "Cash"): 0.0,
+            ("Bonds", "Cash"): 0.0,
+        }
+        names = [n for n, _, _, _ in kept]
+        matrix = [
+            [1.0 if a == b else corr_full.get((a, b), corr_full.get((b, a), 0.0)) for b in names]
+            for a in names
+        ]
+        return MarketAssumptions(
+            assets=[AssetClass(name=n, weight=w) for n, w, _, _ in kept],
+            expected_annual_returns=[
+                real_to_nominal_rate(r, assumptions.inflation) for _, _, r, _ in kept
+            ],
+            annual_volatilities=[v for _, _, _, v in kept],
+            correlation_matrix=matrix,
+            inflation_mean=assumptions.inflation,
+            inflation_vol=0.01,
+            expense_ratio=expense_ratio,
+        )
+
+    nominal_return = real_to_nominal_rate(assumptions.expected_return_real, assumptions.inflation)
     return MarketAssumptions(
         assets=[AssetClass(name="Blended portfolio", weight=1.0)],
         expected_annual_returns=[nominal_return],

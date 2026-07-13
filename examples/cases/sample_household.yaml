@@ -58,6 +58,21 @@ portfolio:
   bond_pct: 0.25
   cash_pct: 0.05
   weighted_expense_ratio: 0.0008
+income_streams:
+  - stream_id: ss-avery
+    name: Social Security (Avery)
+    kind: social_security
+    monthly_amount: 2800
+    start_age: 67
+    cola: true
+    person_index: 0
+  - stream_id: ss-jordan
+    name: Social Security (Jordan)
+    kind: social_security
+    monthly_amount: 2200
+    start_age: 67
+    cola: true
+    person_index: 1
 constraints:
   liquidity_floor: 30000
   notes:

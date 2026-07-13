@@ -76,6 +76,9 @@ class ComputationLedger(BaseModel):
             return float(value) if isinstance(value, (int, float)) else None
         if source_id.startswith("case:"):
             return _resolve_case_path(case, source_id.removeprefix("case:"))
+        if ":" not in source_id and "." in source_id:
+            # Models sometimes drop the scheme on case paths.
+            return _resolve_case_path(case, source_id)
         return None
 
 
