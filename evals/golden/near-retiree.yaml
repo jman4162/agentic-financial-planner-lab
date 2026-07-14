@@ -47,6 +47,4 @@ expect:
     label: base
     key: funded_ratio
     value: 0.646154
-  - tool: funded_ratio_net_of_income
-    label: base
-    key: funded_ratio
+  

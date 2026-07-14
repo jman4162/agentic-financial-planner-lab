@@ -2,13 +2,15 @@
 
 ## 1. Executive summary
 
-The household's retirement goal of $60,000 annual spending at 62 is not achievable under the base, conservative, or optimistic assumption sets. The **cefr** (comprehensive fundedness ratio) of 0.453 indicates significant financial risk, with haircuts for taxes, liquidity, and reliability reducing net assets by 22.8% of gross assets. Sustainable spending under base assumptions is $39,200, below the target. Even in the optimistic scenario, sustainable spending is $44,100, leaving a $15,900 shortfall. Success probabilities range from 30.55% (conservative) to 91.45% (optimistic), but all scenarios require spending cuts to align with portfolio capacity.
+The household can retire at 62 with $60,000 annual spending under the base assumptions, but outcomes depend on market performance and sequence-of-returns risk. Conservative assumptions reduce sustainable spending to $32,340, while optimistic assumptions allow $44,100. Social Security claiming ages trade off benefits vs. longevity risk.
 
 ## 2. Inputs used
 
-- **Base Case:** 0.65
-- **Required Capital (Base):** $1,500,000
-- **Sustainable Spending (Base):** $39,200
+- **Investable assets:** $980,000
+- **Annual expenses:** $88,000
+- **Annual spending goal:** $60,000
+- **Social Security (base):** $3,500
+- **Retirement age:** 62.0 years
 
 ## 3. Important missing data
 
@@ -16,43 +18,47 @@ The household's retirement goal of $60,000 annual spending at 62 is not achievab
 
 ## 4. Base-case results
 
-The base scenario assumes a 4% real return, 2.5% inflation, and a 4% safe withdrawal rate. The funded ratio of 0.65 (65% of required $1.5M) suggests the portfolio can only sustain $39,200/year in real terms. The 5.34-year horizon to financial independence (Fi) requires spending cuts or asset growth to meet the $60k target.
+With $980,000 in retirement investable assets, the base assumptions suggest a sustainable spending capacity of $39,200 annually (source_id=ledger:calc:sustainable_spending:0003#sustainable_spending). This assumes a 4% withdrawal rate (source_id=ledger:calc:funded_ratio:0001#withdrawal_rate) and 5.34 years to financial independence (source_id=ledger:calc:years_to_fi:0002#years_to_fi). All simulated paths succeeded under these assumptions (source_id=ledger:sim:run_simulation:0010#success_probability).
 
-- **Funded Ratio:** 0.65
-- **Years to Fi:** 5.3 years
-- **Sustainable Spending:** $39,200
-- **Success Probability:** 68.3%
+- **Required capital:** $1,500,000
+- **Funded ratio:** 0.65
+- **Sustainable spending:** $39,200
 
 ## 5. Stress-case results
 
 ### conservative
 
-The conservative scenario assumes a 2% real return, 3.5% inflation, and a 3.3% withdrawal rate. The funded ratio drops to 0.54 (54% of required $1.82M), limiting sustainable spending to $32,340/year. The 10.9-year horizon to Fi makes the $60k target even more unattainable without significant asset growth or spending reductions.
+Under conservative assumptions, the required capital increases to $1,818,181.82 (source_id=ledger:calc:funded_ratio:0004#required_capital) with a 3.3% withdrawal rate (source_id=ledger:calc:funded_ratio:0004#withdrawal_rate). Sustainable spending drops to $32,340 annually (source_id=ledger:calc:sustainable_spending:0006#sustainable_spending), and financial independence takes 10.9 years (source_id=ledger:calc:years_to_fi:0005#years_to_fi). All simulated paths succeeded under these assumptions (source_id=ledger:sim:run_simulation:0011#success_probability).
 
-- **Funded Ratio:** 0.54
-- **Years to Fi:** 10.9 years
-- **Sustainable Spending:** $32,340
-- **Success Probability:** 30.6%
+- **Required capital:** $1,818,182
+- **Funded ratio:** 0.54
+- **Sustainable spending:** $32,340
 
 ## 6. Main risks
 
-- The **cefr** of 0.453 indicates the portfolio is only 45.3% of the required capital to sustain $60k/year, with haircuts for taxes (22.8k), liquidity (8.36k), and reliability (7.92k) reducing net assets to $629k from $1.02M gross assets.
-- The current 70% stock allocation (source_id=ledger:portfolio:portfolio_diagnostics:0016#current_stock_pct) exceeds the alpha_recommended 54.3% (source_id=ledger:portfolio:portfolio_diagnostics:0016#alpha_recommended), but this is a diagnostic model comparison, not an actionable recommendation.
+- Sequence-of-returns risk: 98.2% of simulated paths survived a market crash (source_id=ledger:sim:run_simulation:0010#stress_sequence_risk_success_probability)
+- Inflation risk: Conservative assumptions assume 3.5% inflation (source_id=assumption_sets:conservative#inflation)
+- Social Security timing: Benefits start at 67 (source_id=case:income_streams.0.start_age), but claiming at 62 reduces monthly benefits to $3,500 (source_id=ledger:sim:ss_claiming_comparison:0013#monthly_benefit_total)
 
 ## 7. Decision trade-offs
 
-- The household's $50k annual savings (source_id=case:cash_flow.annual_savings) could bridge the gap if redirected to asset growth, but this would require reducing current expenses ($88k/year, source_id=case:cash_flow.annual_expenses) or increasing income.
+- Social Security claiming age trade-offs (SSA-style approximations relative to full retirement age of 67):
+- | Claiming Age | Monthly Benefit | Success Probability |
+- |-------------|----------------|---------------------|
+- | 62          | $3,500         | 99.85%              |
+- | 67          | $5,000         | 100%                |
+- | 70          | $6,200         | 100%                |
 
 ## 8. Suggested next questions
 
-- How might the household adjust their retirement age or spending target to align with portfolio capacity?
-- What role could part-time work or passive income play in bridging the $15.9k shortfall in the optimistic scenario (source_id=ledger:calc:sustainable_spending:0009#sustainable_spending)?
+- How do portfolio rebalancing rules affect long-term returns?
+- What's the impact of a 4% vs. 3.3% withdrawal rate on longevity risk?
+- How do tax implications change with different withdrawal strategies?
 
 ## 9. Methodology and citations
 
-Analysis uses three assumption sets: base (4% return, 2.5% inflation, 4% withdrawal), conservative (2% return, 3.5% inflation, 3.3% withdrawal), and optimistic (5.5% return, 2% inflation, 4.5% withdrawal). Figures are real (today's dollars) and depend on assumptions. The **cefr** (source_id=ledger:metric:compute_health_metric:0013#cefr) is a composite metric incorporating tax, liquidity, and reliability risks.
+Analysis used base, conservative, and optimistic assumption sets (source_id=assumption_sets). Figures are real (today's dollars). Outcomes depend on market performance, sequence-of-returns risk, and Social Security timing. Citable sources include 'dave-ramsey-8-percent-withdrawal' (about withdrawal rate risks) and 'twenty-thirty-percent-returns' (about return expectations).
 
-- Grow Income Faster Than Expenses: The Underrated Math Behind Wealth and Freedom (mcp: `grow-income-faster-than-expenses`)
 - The 8% Withdrawal Rule: Where Dave Ramsey's Retirement Math Breaks (mcp: `dave-ramsey-8-percent-withdrawal`)
 
 ### Assumptions
@@ -74,6 +80,7 @@ This memo is educational analysis produced by an experimental software tool. It 
 Critic checks:
 
 - `numbers_traceable` [blocker]: pass — all traced numbers resolve to ledger or case-file sources
+- `prose_numbers_traceable` [blocker]: pass — all dollar and percent figures in prose match recorded values
 - `no_securities_advice` [blocker]: pass — no individualized securities advice detected
 - `disclaimer_present` [blocker]: pass — required disclaimer present verbatim
 - `assumptions_disclosed` [blocker]: pass — assumptions surfaced and all three labels disclosed in methodology
@@ -81,20 +88,20 @@ Critic checks:
 - `citations_present` [blocker]: pass — citations correspond to fetched research
 - `nominal_real_consistent` [warning]: pass — real/nominal terms stated
 - `certainty_not_overstated` [blocker]: pass — no absolute-certainty language detected
-- `diagnostic_framing` [warning]: pass — allocation diagnostics framed comparatively
-- `certainty_not_overstated` [blocker]: pass — [llm] The prose does not promise or imply certain outcomes beyond citing simulation probabilities. It explicitly states probabilities (e.g., 'success probabilities range from 30.55% to 91.45%') and frames outcomes as dependent on assumptions, without asserting definitive certainty.
-- `no_securities_advice` [blocker]: pass — [llm] The prose does not recommend buying, selling, or holding specific securities. It references portfolio allocations and recommendations (e.g., 70% stock vs. 54.3% alpha_recommended) only as diagnostic comparisons, not actionable advice.
+- `diagnostic_framing` [warning]: pass — no portfolio diagnostics were run; framing check not applicable
+- `certainty_not_overstated` [blocker]: pass — [llm] The memo explicitly conditions all simulation results on stated assumptions (e.g., 'base assumptions', 'conservative assumptions'). While it reports 100% success rates for simulated paths, these are framed as conditional outcomes under specific assumptions, not guaranteed real-world results. No prose promises outcomes beyond the cited probabilities.
+- `no_securities_advice` [blocker]: pass — [llm] The prose does not recommend buying, selling, or holding any specific security, fund, or asset. It focuses on analyzing withdrawal rates, Social Security timing, and risk factors without prescribing actionable investment decisions. All references to sources are contextual rather than prescriptive.
 
 Traced numbers:
 
-- Base Case = 0.6533333333333333 (source: `ledger:calc:funded_ratio:0001#funded_ratio`)
-- Required Capital (Base) = 1500000.0 (source: `ledger:calc:funded_ratio:0001#required_capital`)
-- Sustainable Spending (Base) = 39200.0 (source: `ledger:calc:sustainable_spending:0003#sustainable_spending`)
-- Funded Ratio = 0.6533333333333333 (source: `ledger:calc:funded_ratio:0001#funded_ratio`)
-- Years to Fi = 5.34409778290625 (source: `ledger:calc:years_to_fi:0002#years_to_fi`)
-- Sustainable Spending = 39200.0 (source: `ledger:calc:sustainable_spending:0003#sustainable_spending`)
-- Success Probability = 0.6835 (source: `ledger:sim:run_simulation:0010#success_probability`)
-- Funded Ratio = 0.539 (source: `ledger:calc:funded_ratio:0004#funded_ratio`)
-- Years to Fi = 10.89765217656114 (source: `ledger:calc:years_to_fi:0005#years_to_fi`)
-- Sustainable Spending = 32340.0 (source: `ledger:calc:sustainable_spending:0006#sustainable_spending`)
-- Success Probability = 0.3055 (source: `ledger:sim:run_simulation:0011#success_probability`)
+- Investable assets = 980000.0 (source: `case:balance_sheet.retirement_investable_assets`)
+- Annual expenses = 88000.0 (source: `case:cash_flow.annual_expenses`)
+- Annual spending goal = 60000.0 (source: `case:goals.0.annual_amount_today`)
+- Social Security (base) = 3500.0 (source: `ledger:sim:ss_claiming_comparison:0013#monthly_benefit_total`)
+- Retirement age = 62.0 (source: `case:household.persons.0.planned_retirement_age`)
+- Required capital = 1500000.0 (source: `ledger:calc:funded_ratio:0001#required_capital`)
+- Funded ratio = 0.6533333333333333 (source: `ledger:calc:funded_ratio:0001#funded_ratio`)
+- Sustainable spending = 39200.0 (source: `ledger:calc:sustainable_spending:0003#sustainable_spending`)
+- Required capital = 1818181.8181818181 (source: `ledger:calc:funded_ratio:0004#required_capital`)
+- Funded ratio = 0.539 (source: `ledger:calc:funded_ratio:0004#funded_ratio`)
+- Sustainable spending = 32340.0 (source: `ledger:calc:sustainable_spending:0006#sustainable_spending`)

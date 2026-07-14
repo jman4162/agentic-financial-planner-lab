@@ -106,6 +106,37 @@ class TestStructuredRetry:
         assert result == findings
 
 
+class TestStructuredTimeout:
+    def test_hung_first_attempt_times_out_and_retries(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        import asyncio
+        from typing import Any
+
+        from planner_lab.agents.structured import get_structured
+        from tests.support.stub_model import StubModel
+
+        monkeypatch.setenv("PLANNER_LAB_LLM_TIMEOUT", "0.2")
+
+        class HangingModel(StubModel):
+            def __init__(self, outputs: list[Any]):
+                super().__init__(outputs)
+                self.calls = 0
+
+            async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
+                self.calls += 1
+                if self.calls == 1:
+                    await asyncio.sleep(60)  # simulates a generation loop
+                async for event in super().structured_output(
+                    output_model, prompt, system_prompt, **kw
+                ):
+                    yield event
+
+        findings = passing_findings()
+        model = HangingModel([findings])
+        result = get_structured(model, type(findings), "prompt", "system")
+        assert model.calls == 2
+        assert result == findings
+
+
 class TestPipeline:
     def test_happy_path_produces_approved_memo(self) -> None:
         case = make_case(surfaced=False)

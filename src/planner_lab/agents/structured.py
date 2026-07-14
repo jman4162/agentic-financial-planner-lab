@@ -6,12 +6,21 @@ project are single-turn, and the direct path is simpler to test and stub.
 """
 
 import asyncio
+import os
 from typing import TypeVar
 
 from pydantic import BaseModel
 from strands.models.model import Model
 
 T = TypeVar("T", bound=BaseModel)
+
+# Local models occasionally loop during constrained generation; without a
+# deadline one hung request blocks the whole pipeline.
+_DEFAULT_TIMEOUT_SECONDS = 300.0
+
+
+def _call_timeout() -> float:
+    return float(os.environ.get("PLANNER_LAB_LLM_TIMEOUT", _DEFAULT_TIMEOUT_SECONDS))
 
 
 class StructuredOutputError(RuntimeError):
@@ -38,10 +47,18 @@ async def _collect(model: Model, output_model: type[T], prompt: str, system_prom
 def get_structured(model: Model, output_model: type[T], prompt: str, system_prompt: str) -> T:
     """Run one structured-output call, with a single retry on any failure.
 
-    Local models occasionally emit malformed JSON or an empty response; both
-    are worth exactly one retry before surfacing the error.
+    Local models occasionally emit malformed JSON, an empty response, or hang
+    in a generation loop; each failure mode gets exactly one retry (bounded by
+    PLANNER_LAB_LLM_TIMEOUT seconds per attempt) before the error surfaces.
     """
+    timeout = _call_timeout()
+
+    async def attempt() -> T:
+        return await asyncio.wait_for(
+            _collect(model, output_model, prompt, system_prompt), timeout=timeout
+        )
+
     try:
-        return asyncio.run(_collect(model, output_model, prompt, system_prompt))
+        return asyncio.run(attempt())
     except Exception:
-        return asyncio.run(_collect(model, output_model, prompt, system_prompt))
+        return asyncio.run(attempt())

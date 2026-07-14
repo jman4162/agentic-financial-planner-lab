@@ -32,7 +32,7 @@ flowchart TD
     C4 --> D
     E[MCP research source:<br/>search + fetch, recorded] --> D
     D --> F[Memo writer LLM:<br/>drafts prose, cites only<br/>ids from the ledger menu]
-    F --> G{Critic gate:<br/>9 deterministic checks<br/>+ LLM tone review}
+    F --> G{Critic gate:<br/>10 deterministic checks<br/>+ LLM tone review}
     G -- approved --> H[Planning memo<br/>+ audit sidecar]
     G -- rejected twice --> I[Hard failure:<br/>no memo emitted]
 ```
@@ -151,7 +151,7 @@ Working retirement-readiness pipeline: case-file schemas, deterministic calculat
   year    = {2026},
   url     = {https://github.com/jman4162/agentic-financial-planner-lab},
   doi     = {10.5281/zenodo.21301713},
-  version = {0.1.1},
+  version = {0.2.0},
   license = {MIT}
 }
 ```

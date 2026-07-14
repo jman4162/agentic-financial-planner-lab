@@ -7,8 +7,8 @@ authors:
 url: "https://github.com/jman4162/agentic-financial-planner-lab"
 doi: 10.5281/zenodo.21301713
 license: MIT
-version: 0.1.1
-date-released: 2026-07-10
+version: 0.2.0
+date-released: 2026-07-13
 keywords:
   - financial-planning
   - retirement
