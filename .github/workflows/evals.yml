@@ -4,13 +4,23 @@ on:
   schedule:
     - cron: "17 7 * * *"
   workflow_dispatch:
+    inputs:
+      cases:
+        description: 'Comma-separated golden case names, or "all" for the full set'
+        required: false
+        default: ""
 
 jobs:
   golden-evals:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       EVAL_MODEL: qwen2.5:3b
+      # Hosted runners are CPU-only, and the full ten-case set does not finish in a
+      # window worth spending nightly. These four exercise distinct paths: a funded
+      # baseline, a shortfall, guaranteed income near retirement, and a sparse case
+      # file. Dispatch the workflow with cases=all for the whole set.
+      NIGHTLY_CASES: on-track-couple,deficit-household,near-retiree,minimal-edge
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v8.3.2
@@ -18,31 +28,66 @@ jobs:
           python-version: "3.12"
           enable-cache: true
       - run: uv sync --all-extras
+
       - name: Install Ollama
-        run: curl -fsSL https://ollama.com/install.sh | sh
         timeout-minutes: 5
-      - name: Cache model
-        uses: actions/cache@v4
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          # The installer registers a systemd service that runs as the `ollama` user and
+          # stores models under /usr/share/ollama. That is not the path cached below, and
+          # it also holds port 11434, so starting our own server failed with "address
+          # already in use" on every run. Stop it and run the server as the runner user.
+          sudo systemctl stop ollama
+
+      - name: Restore model cache
+        id: model-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.ollama/models
           key: ollama-${{ env.EVAL_MODEL }}
+
       - name: Start Ollama and pull model
         timeout-minutes: 15
         run: |
           ollama serve &
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 60); do
             curl -sf http://localhost:11434/api/tags >/dev/null && break
             sleep 2
           done
           ollama pull "$EVAL_MODEL"
+
+      # Saved here rather than in a post step, so a slow or failing eval run cannot cost
+      # the cache. The previous layout only saved on success, and since the job never
+      # succeeded the model was re-pulled every night.
+      - name: Save model cache
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-${{ env.EVAL_MODEL }}
+
       - name: Run golden evals
-        timeout-minutes: 40
+        timeout-minutes: 65
         env:
           OLLAMA_MODEL: ${{ env.EVAL_MODEL }}
-        run: uv run python evals/run_evals.py --out evals/reports/ci-latest.md
+          CASES_INPUT: ${{ github.event.inputs.cases }}
+        run: |
+          if [ "$CASES_INPUT" = "all" ]; then
+            selected=""
+            echo "running the full golden set"
+          elif [ -n "$CASES_INPUT" ]; then
+            selected="$CASES_INPUT"
+            echo "running requested cases: $selected"
+          else
+            selected="$NIGHTLY_CASES"
+            echo "running the nightly subset: $selected"
+          fi
+          uv run python evals/run_evals.py --cases "$selected" --out evals/reports/ci-latest.md
+
       - name: Publish report to job summary
         if: always()
         run: cat evals/reports/ci-latest.md >> "$GITHUB_STEP_SUMMARY" || true
+
       - name: Upload report artifact
         if: always()
         uses: actions/upload-artifact@v4

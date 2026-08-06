@@ -849,6 +849,19 @@ wheels = [
 ]
 
 [[package]]
+name = "householdplan"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9a/b4/390c6e0ba9a3a87f78edd55768ae48080c845690a16148f3b26062a18fa6/householdplan-0.1.0.tar.gz", hash = "sha256:b8c063e6405d5e24c61339410e4719c838fc6af077c54b07d221c25ea0e2ea98", size = 94709, upload-time = "2026-08-06T23:25:26.059Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/60/5f8ecc0e548c10c100fb2450ab456e4fe1db8f7069a1e5787c9d124fbbef/householdplan-0.1.0-py3-none-any.whl", hash = "sha256:ab6723d2da3ed0a002621eeee84516ddc1a4f629f8905e0624fdc551b79b2be6", size = 43341, upload-time = "2026-08-06T23:25:24.92Z" },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1991,6 +2004,9 @@ mcp = [
     { name = "httpx" },
     { name = "mcp" },
 ]
+plan = [
+    { name = "householdplan" },
+]
 planning = [
     { name = "fundedness" },
     { name = "monteplan" },
@@ -2002,6 +2018,7 @@ portfolio = [
 [package.metadata]
 requires-dist = [
     { name = "fundedness", marker = "extra == 'planning'", specifier = ">=0.2.4" },
+    { name = "householdplan", marker = "extra == 'plan'", specifier = ">=0.1" },
     { name = "httpx", marker = "extra == 'mcp'", specifier = ">=0.27" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "lifecycle-allocation", marker = "extra == 'portfolio'", specifier = ">=0.2" },
@@ -2018,7 +2035,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["agent", "planning", "portfolio", "mcp", "dev"]
+provides-extras = ["agent", "planning", "portfolio", "plan", "mcp", "dev"]
 
 [[package]]
 name = "plotly"
