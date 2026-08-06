@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+git config core.hooksPath .githooks    # once per clone: enables the commit-identity check
 uv sync --extra agent --extra planning --extra dev    # full install
 uv run pytest                          # run tests (offline; live tests are opt-in marks)
 uv run pytest tests/test_x.py::test_y  # run a single test

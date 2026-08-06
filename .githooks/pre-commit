@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Refuse any commit authored under an identity other than this repo's owner.
+#
+# Several identities exist on this machine, and git picks one from whichever config it
+# finds first. A clone with no local config inherits the global identity, which may not be
+# the right one for this repository. The GitHub author link is permanent and the address is
+# exposed in the public API, so this is checked before the commit rather than repaired
+# after one.
+#
+# Enable it with:
+#   git config core.hooksPath .githooks
+set -uo pipefail
+
+EXPECTED_NAME="John Hodge"
+EXPECTED_EMAIL="jhodge007@gmail.com"
+
+author_name="$(git config user.name || true)"
+author_email="$(git config user.email || true)"
+
+if [ "$author_name" != "$EXPECTED_NAME" ] || [ "$author_email" != "$EXPECTED_EMAIL" ]; then
+  cat >&2 <<EOF
+[identity] BLOCKED. This repository commits under a single identity.
+
+  expected: $EXPECTED_NAME <$EXPECTED_EMAIL>
+  actual:   ${author_name:-<unset>} <${author_email:-<unset>}>
+
+Set it for this repository, then commit again:
+
+  git config user.name  "$EXPECTED_NAME"
+  git config user.email "$EXPECTED_EMAIL"
+EOF
+  exit 1
+fi
+
+# GIT_AUTHOR_* and GIT_COMMITTER_* override the config above, and a rebase or an amend can
+# set one without the other. Check the values git will actually record.
+for var_name in GIT_AUTHOR_NAME GIT_COMMITTER_NAME; do
+  value="${!var_name:-$EXPECTED_NAME}"
+  if [ "$value" != "$EXPECTED_NAME" ]; then
+    echo "[identity] BLOCKED. $var_name is set to '$value', expected '$EXPECTED_NAME'." >&2
+    exit 1
+  fi
+done
+
+for var_name in GIT_AUTHOR_EMAIL GIT_COMMITTER_EMAIL; do
+  value="${!var_name:-$EXPECTED_EMAIL}"
+  if [ "$value" != "$EXPECTED_EMAIL" ]; then
+    echo "[identity] BLOCKED. $var_name is set to '$value', expected '$EXPECTED_EMAIL'." >&2
+    exit 1
+  fi
+done
+
+exit 0
