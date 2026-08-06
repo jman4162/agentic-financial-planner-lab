@@ -16,17 +16,18 @@ uv run planner-lab memo examples/cases/sample_household.yaml -o memo.md --yes  #
 uv run planner-lab analyze examples/cases/sample_household.yaml --simulate --health --allocation \
   --ss-comparison --spending-policy vpw --compare-spending-policies --sensitivity --yes
 uv run planner-lab import-cashflow examples/data/sample_transactions_monarch.csv --format monarch
+uv run planner-lab plan examples/cases/sample_household.yaml -o plan.md   # policy document, no LLM
 uv run python evals/run_evals.py       # golden evals against the local model (slow; writes report)
 bash scripts/slopcheck.sh              # AI-slop lint on public prose (see Writing style)
 ```
 
-The package lives in `src/planner_lab/` (src layout, hatchling). Dependencies are grouped as optional extras in `pyproject.toml` (`agent`, `planning`, `portfolio`, `mcp`, `dev`); the core must install, import, and pass its tests with no extras (pipeline/hook tests need `agent`; `test_adapter_*` files skip when their package is absent). `--research` needs the `PLANNER_LAB_RESEARCH_MCP_URL` env var; that URL lives only in the environment, never in code or docs.
+The package lives in `src/planner_lab/` (src layout, hatchling). Dependencies are grouped as optional extras in `pyproject.toml` (`agent`, `planning`, `portfolio`, `mcp`, `plan`, `dev`); the core must install, import, and pass its tests with no extras (pipeline/hook tests need `agent`; `test_adapter_*` files skip when their package is absent). `--research` needs the `PLANNER_LAB_RESEARCH_MCP_URL` env var; that URL lives only in the environment, never in code or docs.
 
 Known environment quirk: this repo lives under `~/Documents`, and macOS file syncing sometimes marks new `.venv` files with the BSD `hidden` flag, which makes Python skip the editable-install `.pth` file (`ModuleNotFoundError: planner_lab`). Fix: `chflags -R nohidden .venv` and delete any `*.pth` duplicates with ` 2`/` 3` suffixes in `site-packages`.
 
 ## Project status
 
-Built: schemas (including guaranteed-income streams and per-asset-class assumptions), calculators, traceability ledger, deterministic critic (ten checks, including prose dollar/percent verification), memo renderer, CLI (`validate`/`calc`/`analyze`/`memo`/`intake`/`import-cashflow`), agent pipeline with exactly two LLM call sites (memo writer, LLM critic), compliance hooks, Monte Carlo simulation adapter (multi-asset, spending policies, sensitivity, SS claiming comparison, goal outflow events), generic MCP research adapter with citation enforcement, CEFR health metric with income-netted liability segments, lifecycle allocation diagnostics (comparisons, never instructions), a stdlib CSV cash-flow importer, and a golden eval harness (`evals/`) with a nightly CI job running a real local model. Deferred: taxes/RMD/Roth conversions, additional model providers, Streamlit demo, historical backtesting.
+Built: schemas (including guaranteed-income streams and per-asset-class assumptions), calculators, traceability ledger, deterministic critic (ten checks, including prose dollar/percent verification), memo renderer, CLI (`validate`/`calc`/`analyze`/`memo`/`intake`/`import-cashflow`), agent pipeline with exactly two LLM call sites (memo writer, LLM critic), compliance hooks, Monte Carlo simulation adapter (multi-asset, spending policies, sensitivity, SS claiming comparison, goal outflow events), generic MCP research adapter with citation enforcement, CEFR health metric with income-netted liability segments, lifecycle allocation diagnostics (comparisons, never instructions), a stdlib CSV cash-flow importer, a policy-document adapter (`PlanDocumentBuilder`, `planner-lab plan`) that renders a written household plan deterministically with no LLM, and a golden eval harness (`evals/`) with a nightly CI job running a real local model. Deferred: taxes/RMD/Roth conversions, additional model providers, Streamlit demo, historical backtesting.
 
 ## What this project is
 

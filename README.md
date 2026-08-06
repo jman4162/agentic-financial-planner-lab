@@ -92,6 +92,9 @@ PLANNER_LAB_RESEARCH_MCP_URL=https://example.com/mcp \
 uv run planner-lab import-cashflow examples/data/sample_transactions_monarch.csv \
   --format monarch --case my_case.yaml --write
 
+# Write a policy document: what this household does when something happens (no LLM involved)
+uv run planner-lab plan examples/cases/sample_household.yaml -o plan.md
+
 # Interactive intake chat that builds a case file
 uv run planner-lab intake -o my_case.yaml
 
@@ -136,7 +139,7 @@ Runtime configuration is environment-based: model provider, research server, and
 
 Small local models occasionally mis-copy a number or skip a citation; the critic then rejects the memo after one revision attempt rather than emitting it. A larger model (for example `OLLAMA_MODEL=gpt-oss:20b`) makes full runs with simulation, diagnostics, and research more reliable.
 
-Optional extras: `agent` (LLM pipeline, Strands SDK), `planning` (Monte Carlo simulation, fundedness metric), `portfolio` (lifecycle allocation diagnostics), `mcp` (research sources), `dev` (tests, lint, types). The core installs with none of them.
+Optional extras: `agent` (LLM pipeline, Strands SDK), `planning` (Monte Carlo simulation, fundedness metric), `portfolio` (lifecycle allocation diagnostics), `mcp` (research sources), `plan` (policy documents), `dev` (tests, lint, types). The core installs with none of them.
 
 ## Status
 

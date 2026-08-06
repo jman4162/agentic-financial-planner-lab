@@ -8,6 +8,7 @@ from typing import Annotated, Any
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from planner_lab import calculators
@@ -287,6 +288,56 @@ def memo(
     console.print(f"[green]Memo written:[/green] {output}")
     console.print(f"[green]Audit sidecar:[/green] {audit_path}")
     _print_report(result.report)
+
+
+@app.command()
+def plan(
+    case_path: Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
+    output: Annotated[Path, typer.Option("-o", "--out", help="Where to write the document")],
+    assumption_set: Annotated[
+        str, typer.Option("--set", help="base|conservative|optimistic")
+    ] = "base",
+    attribution: Annotated[
+        str | None, typer.Option("--attribution", help="Credit line placed before the disclaimer")
+    ] = None,
+) -> None:
+    """Write a policy document: what this household does when something happens.
+
+    Distinct from `memo`, which reports what the calculators found. This states decisions
+    rather than results, runs no LLM, and seeds a figure only where the case file already
+    implies one. Everything else is left blank for a person to decide.
+    """
+    from planner_lab.adapters import AdapterUnavailableError, get_plan_builder
+    from planner_lab.schemas.assumptions import default_assumptions
+
+    case = load_case(case_path)
+    bundle = case.assumptions or default_assumptions()
+    chosen = getattr(bundle, assumption_set, None)
+    if chosen is None:
+        console.print(f"[red]Unknown assumption set:[/red] {assumption_set}")
+        raise typer.Exit(1)
+
+    try:
+        builder = get_plan_builder()
+    except AdapterUnavailableError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(builder.build(case, chosen, attribution=attribution))
+    console.print(f"[green]Plan written:[/green] {output}")
+
+    findings = builder.check(case, chosen)
+    blocking = [f for f in findings if f.startswith("BLOCKING")]
+    console.print("\nStructural checks:")
+    if not findings:
+        console.print("  [green]all clean[/green]")
+    for finding in findings:
+        color = "red" if finding.startswith("BLOCKING") else "yellow"
+        # Findings carry the rule id in square brackets, which Rich would read as markup.
+        console.print(f"  [{color}]{escape(finding)}[/{color}]")
+    if blocking:
+        raise typer.Exit(1)
 
 
 @app.command("import-cashflow")

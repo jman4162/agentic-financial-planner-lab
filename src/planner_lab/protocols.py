@@ -95,3 +95,25 @@ class PortfolioAnalyticsEngine(Protocol):
     name: str
 
     def analyze(self, case: CaseFile, assumptions: AssumptionSet) -> PortfolioDiagnostics: ...
+
+
+@runtime_checkable
+class PlanDocumentBuilder(Protocol):
+    """Renders a written policy document: what the household does when something happens.
+
+    Distinct from the memo, which reports what the calculators found. A memo answers a
+    question once; a policy document is meant to be reread under pressure, so it states
+    decisions rather than results and carries no LLM-authored prose.
+    """
+
+    name: str
+
+    def build(
+        self,
+        case: CaseFile,
+        assumptions: AssumptionSet,
+        *,
+        attribution: str | None = None,
+    ) -> str: ...
+
+    def check(self, case: CaseFile, assumptions: AssumptionSet) -> list[str]: ...

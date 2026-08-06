@@ -8,6 +8,7 @@ these loaders; it never imports adapter modules directly.
 from planner_lab.protocols import (
     CashflowImporter,
     FinancialHealthMetric,
+    PlanDocumentBuilder,
     PortfolioAnalyticsEngine,
     ResearchSource,
     ScenarioSimulator,
@@ -60,6 +61,18 @@ def get_health_metric(name: str = "funded") -> FinancialHealthMetric:
             ) from e
         return FundednessMetric()
     raise AdapterUnavailableError(f"unknown health metric {name!r}")
+
+
+def get_plan_builder(name: str = "household") -> PlanDocumentBuilder:
+    if name == "household":
+        try:
+            from planner_lab.adapters.household_plan.builder import HouseholdPlanBuilder
+        except ImportError as e:
+            raise AdapterUnavailableError(
+                "Policy documents require the 'plan' extra: uv sync --extra plan"
+            ) from e
+        return HouseholdPlanBuilder()
+    raise AdapterUnavailableError(f"unknown plan builder {name!r}")
 
 
 def get_portfolio_engine(name: str = "lifecycle") -> PortfolioAnalyticsEngine:
