@@ -382,6 +382,7 @@ def run_analysis(
     case: CaseFile,
     *,
     model: Model | None = None,
+    critic_model: Model | None = None,
     simulate: bool = False,
     spending_policy: SpendingPolicy = "constant_real",
     compare_spending_policies: bool = False,
@@ -405,6 +406,12 @@ def run_analysis(
         from planner_lab.agents.models import build_model
 
         model = build_model()
+    if critic_model is None:
+        from planner_lab.agents.models import build_critic_model
+
+        # Falls back to the writer's model. Judging your own prose is a weak check, so
+        # PLANNER_LAB_CRITIC_MODEL can put a different model on the critic's side.
+        critic_model = build_critic_model() or model
     if confirm is None:
         confirm = lambda _: True  # noqa: E731
 
@@ -429,7 +436,7 @@ def run_analysis(
         docs = _run_research(case, ledger, research_source)
         source_name = research_source.name
 
-    llm_checks = make_llm_checks(model)
+    llm_checks = make_llm_checks(critic_model)
     memo = write_memo(case, ledger, model, research=docs, research_source_name=source_name)
     report = run_critic(memo, ledger, case, llm_checks=llm_checks)
     if not report.approved:

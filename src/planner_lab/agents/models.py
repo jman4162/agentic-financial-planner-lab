@@ -22,7 +22,7 @@ def _ollama_options() -> dict[str, Any]:
     return options
 
 
-def build_model() -> Model:
+def build_model(*, model_id: str | None = None) -> Model:
     """Build the configured model provider.
 
     Environment:
@@ -33,6 +33,9 @@ def build_model() -> Model:
         PLANNER_LAB_LLM_TEMPERATURE: sampling temperature (unset = provider default)
         PLANNER_LAB_LLM_SEED: sampling seed, for reproducible eval runs (Ollama only)
         PLANNER_LAB_BEDROCK_MODEL: Bedrock model id (provider "bedrock" only)
+
+    ``model_id`` overrides the environment's model selection while keeping every other
+    setting; used to build the critic on a different model than the writer.
     """
     provider = os.environ.get("PLANNER_LAB_MODEL_PROVIDER", "ollama")
     temperature = os.environ.get("PLANNER_LAB_LLM_TEMPERATURE")
@@ -44,12 +47,30 @@ def build_model() -> Model:
             kwargs["temperature"] = float(temperature)
         return OllamaModel(
             host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
-            model_id=os.environ.get("OLLAMA_MODEL", "qwen3"),
+            model_id=model_id or os.environ.get("OLLAMA_MODEL", "qwen3"),
             **kwargs,
         )
     if provider == "bedrock":
         from strands.models import BedrockModel
 
-        model_id = os.environ.get("PLANNER_LAB_BEDROCK_MODEL")
-        return BedrockModel(model_id=model_id) if model_id else BedrockModel()
+        bedrock_id = model_id or os.environ.get("PLANNER_LAB_BEDROCK_MODEL")
+        return BedrockModel(model_id=bedrock_id) if bedrock_id else BedrockModel()
     raise ValueError(f"unknown model provider {provider!r}")
+
+
+def build_critic_model() -> Model | None:
+    """Build a separate model for the LLM critic, or None to reuse the writer's.
+
+    Environment:
+        PLANNER_LAB_CRITIC_MODEL: model id for the critic (same provider as the writer)
+
+    A model reviewing its own prose is a weak judge, and with a small writer it is an
+    erratic one: in instrumented eval runs the self-judge flagged a suggested question
+    as securities advice and a meta-sentence as overstated certainty, none of it
+    corroborated by the deterministic checks. The critic call is short, so a stronger
+    judge costs little even where the writer must stay small.
+    """
+    critic_id = os.environ.get("PLANNER_LAB_CRITIC_MODEL")
+    if not critic_id:
+        return None
+    return build_model(model_id=critic_id)

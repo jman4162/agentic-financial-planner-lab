@@ -109,12 +109,14 @@ def run_case(path: Path) -> dict[str, Any]:
 def write_report(records: list[dict[str, Any]], out: Path) -> None:
     model = os.environ.get("OLLAMA_MODEL", "qwen3")
     provider = os.environ.get("PLANNER_LAB_MODEL_PROVIDER", "ollama")
+    critic = os.environ.get("PLANNER_LAB_CRITIC_MODEL")
     approved = sum(1 for r in records if r["approved"])
     lines = [
         "# Eval report",
         "",
         f"- Date: {datetime.date.today().isoformat()}",
         f"- Model: {provider}:{model}",
+        f"- Critic model: {provider}:{critic}" if critic else "- Critic model: same as writer",
         f"- planner-lab: {importlib.metadata.version('planner-lab')}",
         f"- Python: {platform.python_version()}",
         f"- Approval rate: {approved}/{len(records)}",

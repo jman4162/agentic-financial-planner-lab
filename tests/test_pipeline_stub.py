@@ -239,3 +239,40 @@ class TestNumberMenu:
         for set_name in ("base", "conservative", "optimistic"):
             assert f"case:assumptions.{set_name}.expected_return_real" in menu
             assert f"case:assumptions.{set_name}.safe_withdrawal_rate" in menu
+
+
+class TestCriticModelOverride:
+    def test_critic_calls_go_to_the_critic_model(self) -> None:
+        """With a critic model supplied, memo drafting stays on the writer and the LLM
+        critique runs on the judge. A model reviewing its own prose is a weak check;
+        this is the seam that lets the judge differ."""
+        case = make_case(surfaced=False)
+        writer = StubModel([make_draft(case)])
+        judge = StubModel([passing_findings()])
+        result = run_analysis(case, model=writer, critic_model=judge, confirm=lambda _: True)
+
+        assert result.report.approved
+        writer_outputs = [m.__name__ for m, _ in writer.structured_output_calls]
+        judge_outputs = [m.__name__ for m, _ in judge.structured_output_calls]
+        assert writer_outputs == ["MemoDraft"]
+        assert judge_outputs == ["LLMCriticFindings"]
+
+    def test_without_an_override_the_writer_judges_itself(self) -> None:
+        case = make_case(surfaced=False)
+        writer = StubModel([make_draft(case), passing_findings()])
+        result = run_analysis(case, model=writer, confirm=lambda _: True)
+        assert result.report.approved
+        assert [m.__name__ for m, _ in writer.structured_output_calls] == [
+            "MemoDraft",
+            "LLMCriticFindings",
+        ]
+
+    def test_env_override_builds_a_separate_critic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from planner_lab.agents.models import build_critic_model
+
+        monkeypatch.delenv("PLANNER_LAB_CRITIC_MODEL", raising=False)
+        assert build_critic_model() is None
+        monkeypatch.setenv("PLANNER_LAB_CRITIC_MODEL", "qwen3")
+        critic = build_critic_model()
+        assert critic is not None
+        assert critic.get_config()["model_id"] == "qwen3"
