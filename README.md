@@ -123,7 +123,9 @@ Full walkthroughs with real generated memos, checked in verbatim:
 
 ## Evals
 
-`evals/golden/` holds ten synthetic household cases with expected ledger values. `uv run python evals/run_evals.py` runs each through the full pipeline against a real local model and writes a report ([latest](evals/reports/latest.md)) recording the approval rate: how often the model produced a memo that survived every check. Deterministic ledger mismatches always fail the run; critic rejections are the system working as designed and are scored, not hidden. A nightly GitHub Actions job runs the suite against a small cached Ollama model.
+`evals/golden/` holds ten synthetic household cases with expected ledger values. `uv run python evals/run_evals.py` runs each through the full pipeline against a real local model and writes a report ([latest](evals/reports/latest.md)) recording the approval rate: how often the model produced a memo that survived every check. Deterministic ledger mismatches always fail the run; critic rejections are the system working as designed and are scored, not hidden.
+
+The committed baseline is the quality number: 7/10 on `qwen3`. A nightly GitHub Actions job runs a four-case subset against `qwen2.5:3b`, which is what fits on a CPU-only runner, and that model approves close to nothing. Treat the nightly job as a smoke test: it proves the pipeline runs end to end against a real model and that no memo claimed a figure the ledger cannot account for. Its approval rate is not a measure of memo quality.
 
 ## Configuration
 
