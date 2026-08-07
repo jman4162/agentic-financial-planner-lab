@@ -109,6 +109,10 @@ jobs:
           # changed rather than the dice. The local experiments pinned the same values.
           PLANNER_LAB_LLM_SEED: "42"
           PLANNER_LAB_LLM_TEMPERATURE: "0"
+          # Per-call timeout. The default 300s fits the small writer but not the qwen3
+          # critic on a CPU runner, which reads the whole memo before judging; two calls
+          # exceeded it in the sizing run and were miscounted as crashes.
+          PLANNER_LAB_LLM_TIMEOUT: "900"
           CASES_INPUT: ${{ github.event.inputs.cases }}
         run: |
           if [ "$CASES_INPUT" = "all" ]; then
