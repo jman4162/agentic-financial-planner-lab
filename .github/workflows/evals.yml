@@ -13,15 +13,24 @@ on:
         description: "Ollama model id to evaluate (defaults to the nightly model)"
         required: false
         default: ""
+      critic_model:
+        description: "Ollama model id for the LLM critic (defaults to qwen3)"
+        required: false
+        default: ""
 
 jobs:
   golden-evals:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      # A dispatch can override the model for one-off experiments without editing this
-      # file; the nightly schedule always uses the default.
+      # A dispatch can override the models for one-off experiments without editing this
+      # file; the nightly schedule always uses the defaults.
       EVAL_MODEL: ${{ github.event.inputs.model || 'qwen2.5:3b' }}
+      # The critic runs on a stronger model than the writer. A small model judging its
+      # own prose proved erratic (it flagged a required memo section as securities
+      # advice); the critic call is one short judgment per pass, so a larger judge fits
+      # the budget even though a larger writer does not.
+      EVAL_CRITIC_MODEL: ${{ github.event.inputs.critic_model || 'qwen3' }}
       # Hosted runners are CPU-only, and the full ten-case set does not finish in a
       # window worth spending nightly. These four exercise distinct paths: a funded
       # baseline, a shortfall, guaranteed income near retirement, and a sparse case
@@ -64,10 +73,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.ollama/models
-          key: ollama-${{ env.EVAL_MODEL }}
+          key: ollama-${{ env.EVAL_MODEL }}-${{ env.EVAL_CRITIC_MODEL }}
 
-      - name: Start Ollama and pull model
-        timeout-minutes: 15
+      - name: Start Ollama and pull models
+        timeout-minutes: 20
         run: |
           ollama serve &
           for _ in $(seq 1 60); do
@@ -75,6 +84,9 @@ jobs:
             sleep 2
           done
           ollama pull "$EVAL_MODEL"
+          if [ "$EVAL_CRITIC_MODEL" != "$EVAL_MODEL" ]; then
+            ollama pull "$EVAL_CRITIC_MODEL"
+          fi
 
       # Saved here rather than in a post step, so a slow or failing eval run cannot cost
       # the cache. The previous layout only saved on success, and since the job never
@@ -84,12 +96,13 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.ollama/models
-          key: ollama-${{ env.EVAL_MODEL }}
+          key: ollama-${{ env.EVAL_MODEL }}-${{ env.EVAL_CRITIC_MODEL }}
 
       - name: Run golden evals
         timeout-minutes: 65
         env:
           OLLAMA_MODEL: ${{ env.EVAL_MODEL }}
+          PLANNER_LAB_CRITIC_MODEL: ${{ env.EVAL_CRITIC_MODEL }}
           CASES_INPUT: ${{ github.event.inputs.cases }}
         run: |
           if [ "$CASES_INPUT" = "all" ]; then
