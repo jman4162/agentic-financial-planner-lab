@@ -850,15 +850,15 @@ wheels = [
 
 [[package]]
 name = "householdplan"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9a/b4/390c6e0ba9a3a87f78edd55768ae48080c845690a16148f3b26062a18fa6/householdplan-0.1.0.tar.gz", hash = "sha256:b8c063e6405d5e24c61339410e4719c838fc6af077c54b07d221c25ea0e2ea98", size = 94709, upload-time = "2026-08-06T23:25:26.059Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/3c/52f1974b0da83b160510fce83c484ba3ab9ab35d3e4d5d3e70f3c9b36c76/householdplan-0.2.0.tar.gz", hash = "sha256:557c42c4a7247d5585a2ffef58ee5c56a19ff05c8e8edadcf4a8c2ef676416c6", size = 100940, upload-time = "2026-08-07T01:31:56.462Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/32/60/5f8ecc0e548c10c100fb2450ab456e4fe1db8f7069a1e5787c9d124fbbef/householdplan-0.1.0-py3-none-any.whl", hash = "sha256:ab6723d2da3ed0a002621eeee84516ddc1a4f629f8905e0624fdc551b79b2be6", size = 43341, upload-time = "2026-08-06T23:25:24.92Z" },
+    { url = "https://files.pythonhosted.org/packages/35/15/2f77e9e6f2a9bfb823a5445da01bddc35674057b74de270868f3fa901151/householdplan-0.2.0-py3-none-any.whl", hash = "sha256:0629b35ef4a66926bff6842947ce4ad19fce2c4053c0793709dc1b5a25fe300a", size = 46880, upload-time = "2026-08-07T01:31:55.247Z" },
 ]
 
 [[package]]
