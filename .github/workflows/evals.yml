@@ -21,7 +21,9 @@ on:
 jobs:
   golden-evals:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # The qwen3 critic roughly triples per-case time on a CPU runner: about 15 minutes
+    # per case observed, so four cases need ~65 minutes of evals before startup.
+    timeout-minutes: 110
     env:
       # A dispatch can override the models for one-off experiments without editing this
       # file; the nightly schedule always uses the defaults.
@@ -99,10 +101,14 @@ jobs:
           key: ollama-${{ env.EVAL_MODEL }}-${{ env.EVAL_CRITIC_MODEL }}
 
       - name: Run golden evals
-        timeout-minutes: 65
+        timeout-minutes: 90
         env:
           OLLAMA_MODEL: ${{ env.EVAL_MODEL }}
           PLANNER_LAB_CRITIC_MODEL: ${{ env.EVAL_CRITIC_MODEL }}
+          # Deterministic sampling, so a score change between nights means the code
+          # changed rather than the dice. The local experiments pinned the same values.
+          PLANNER_LAB_LLM_SEED: "42"
+          PLANNER_LAB_LLM_TEMPERATURE: "0"
           CASES_INPUT: ${{ github.event.inputs.cases }}
         run: |
           if [ "$CASES_INPUT" = "all" ]; then
