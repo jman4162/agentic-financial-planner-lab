@@ -98,6 +98,33 @@ def _number_menu(case: CaseFile, ledger: ComputationLedger) -> str:
             f"value={stream.monthly_amount} ({stream.name}, monthly, from age "
             f"{stream.start_age})"
         )
+    # Assumption-set values get menu entries too. The memo must discuss the base,
+    # conservative, and optimistic sets, so models cite these constantly; with no legal
+    # id on the menu they invent formats ("assumption_sets:base:inflation",
+    # "base_case.expected_return_real") that resolve to nothing, and convert ratios to
+    # percentages while they are at it. Every failing source_id in the first
+    # instrumented eval run was one of these inventions.
+    if case.assumptions is not None:
+        for set_name in ("base", "conservative", "optimistic"):
+            assumption_set = getattr(case.assumptions, set_name)
+            for field in (
+                "expected_return_real",
+                "return_volatility",
+                "inflation",
+                "safe_withdrawal_rate",
+                "plan_end_age",
+                "stock_return_real",
+                "bond_return_real",
+                "stock_volatility",
+                "bond_volatility",
+                "stock_bond_correlation",
+            ):
+                value = getattr(assumption_set, field)
+                if value is not None:
+                    lines.append(
+                        f"- source_id=case:assumptions.{set_name}.{field} value={value} "
+                        f"({set_name} assumption)"
+                    )
     return "\n".join(lines)
 
 

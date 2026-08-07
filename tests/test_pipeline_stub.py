@@ -10,7 +10,7 @@ from planner_lab.memo.disclaimer import REQUIRED_DISCLAIMER
 from planner_lab.memo.render import MemoRejectedError
 from planner_lab.schemas.case_file import CaseFile
 from planner_lab.schemas.memo import ScenarioNarrative, TracedNumber
-from tests.support.fixtures import make_case
+from tests.support.fixtures import make_case, make_ledger
 from tests.support.stub_model import StubModel
 
 METHODOLOGY = (
@@ -207,3 +207,35 @@ class TestPipeline:
         assert any(n.source_id == "ledger:nope#x" for n in err.memo.all_traced_numbers())
         assert err.ledger is not None
         assert any(e.tool_name == "funded_ratio" for e in err.ledger.entries)
+
+
+class TestNumberMenu:
+    def test_every_menu_source_id_resolves(self) -> None:
+        """The menu is the model's contract: anything offered must trace. An entry that
+        does not resolve teaches the model an id the critic will then reject."""
+        from planner_lab.agents.memo_writer import _number_menu
+
+        case = make_case()
+        ledger = make_ledger(case)
+        menu = _number_menu(case, ledger)
+        offered = [
+            line.split("source_id=")[1].split(" ")[0]
+            for line in menu.splitlines()
+            if "source_id=" in line
+        ]
+        assert offered, "menu is empty"
+        unresolvable = [sid for sid in offered if ledger.resolve(sid, case) is None]
+        assert unresolvable == []
+
+    def test_assumption_values_are_on_the_menu(self) -> None:
+        """The memo must discuss all three assumption sets, so their values need legal
+        ids. Without these entries, models invent formats that resolve to nothing;
+        every failing source_id in the first instrumented eval run was such an
+        invention."""
+        from planner_lab.agents.memo_writer import _number_menu
+
+        case = make_case()
+        menu = _number_menu(case, make_ledger(case))
+        for set_name in ("base", "conservative", "optimistic"):
+            assert f"case:assumptions.{set_name}.expected_return_real" in menu
+            assert f"case:assumptions.{set_name}.safe_withdrawal_rate" in menu
