@@ -9,13 +9,19 @@ on:
         description: 'Comma-separated golden case names, or "all" for the full set'
         required: false
         default: ""
+      model:
+        description: "Ollama model id to evaluate (defaults to the nightly model)"
+        required: false
+        default: ""
 
 jobs:
   golden-evals:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      EVAL_MODEL: qwen2.5:3b
+      # A dispatch can override the model for one-off experiments without editing this
+      # file; the nightly schedule always uses the default.
+      EVAL_MODEL: ${{ github.event.inputs.model || 'qwen2.5:3b' }}
       # Hosted runners are CPU-only, and the full ten-case set does not finish in a
       # window worth spending nightly. These four exercise distinct paths: a funded
       # baseline, a shortfall, guaranteed income near retirement, and a sparse case
@@ -104,9 +110,11 @@ jobs:
           {
             echo "> **The approval rate below is not a quality measurement.** This job runs"
             echo "> \`$EVAL_MODEL\`, which is small enough to finish on a CPU-only runner and"
-            echo "> approves close to nothing. A green run means the pipeline executed and no"
-            echo "> memo claimed a figure the ledger cannot account for. For a quality number,"
-            echo "> see the committed baseline in \`evals/reports/latest.md\`."
+            echo "> approves close to nothing. A green run means the pipeline executed end to"
+            echo "> end against a real model and every recorded calculator output matched the"
+            echo "> golden expectations, including on rejected memos. For a quality number,"
+            echo "> see the committed baseline in \`evals/reports/latest.md\`. Rejections carry"
+            echo "> their evidence in the report below."
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           cat evals/reports/ci-latest.md >> "$GITHUB_STEP_SUMMARY" || true

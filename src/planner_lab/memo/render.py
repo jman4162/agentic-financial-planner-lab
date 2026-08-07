@@ -2,11 +2,28 @@
 
 from planner_lab.schemas.critic import CriticReport
 from planner_lab.schemas.memo import PlanningMemo, ScenarioNarrative, TracedNumber
+from planner_lab.schemas.results import ComputationLedger
 
 
 class MemoRejectedError(RuntimeError):
-    def __init__(self, report: CriticReport):
+    """Raised when the critic refuses the memo after its one revision.
+
+    Carries the rejected memo and the ledger alongside the report, so a caller can
+    inspect what the model actually wrote against what the calculators actually
+    recorded. Without these, a rejection reports which checks failed but destroys the
+    evidence of why, and the deterministic ledger comparisons cannot run at all.
+    """
+
+    def __init__(
+        self,
+        report: CriticReport,
+        *,
+        memo: PlanningMemo | None = None,
+        ledger: ComputationLedger | None = None,
+    ):
         self.report = report
+        self.memo = memo
+        self.ledger = ledger
         blockers = "; ".join(c.details for c in report.blockers())
         super().__init__(f"memo rejected by critic: {blockers}")
 

@@ -188,3 +188,22 @@ class TestPipeline:
         with pytest.raises(MemoRejectedError) as exc_info:
             run_analysis(case, model=model, confirm=lambda _: True)
         assert any(c.check_id == "numbers_traceable" for c in exc_info.value.report.blockers())
+
+    def test_rejection_carries_the_memo_and_ledger(self) -> None:
+        """The evidence of a rejection must survive it. The eval harness reads the
+        rejected memo's traced numbers against the ledger's real entry ids, and the
+        deterministic ledger comparisons must run whether or not the memo passed."""
+        case = make_case(surfaced=False)
+        bad_draft = make_draft(case)
+        bad_draft.base_case.key_numbers.append(
+            TracedNumber(label="Invented", value=1.23, unit="ratio", source_id="ledger:nope#x")
+        )
+        model = StubModel([bad_draft, passing_findings(), bad_draft, passing_findings()])
+        with pytest.raises(MemoRejectedError) as exc_info:
+            run_analysis(case, model=model, confirm=lambda _: True)
+
+        err = exc_info.value
+        assert err.memo is not None
+        assert any(n.source_id == "ledger:nope#x" for n in err.memo.all_traced_numbers())
+        assert err.ledger is not None
+        assert any(e.tool_name == "funded_ratio" for e in err.ledger.entries)

@@ -37,12 +37,12 @@ from planner_lab.schemas.case_file import CaseFile  # noqa: E402
 GOLDEN_DIR = Path(__file__).parent / "golden"
 
 
-def check_ledger(result: Any, checks: list[dict[str, Any]]) -> list[str]:
+def check_ledger(ledger: Any, checks: list[dict[str, Any]]) -> list[str]:
     breaches = []
     for check in checks:
         matches = [
             e
-            for e in result.ledger.entries
+            for e in ledger.entries
             if e.tool_name == check["tool"]
             and (check.get("label") is None or e.assumptions_label == check["label"])
         ]
@@ -73,11 +73,31 @@ def run_case(path: Path) -> dict[str, Any]:
         )
         record["approved"] = True
         record["failed_checks"] = [c.check_id for c in result.report.checks if not c.passed]
-        record["breaches"] = check_ledger(result, doc["expect"].get("ledger_checks", []))
+        record["breaches"] = check_ledger(result.ledger, doc["expect"].get("ledger_checks", []))
     except MemoRejectedError as e:
         record["approved"] = False
         record["failed_checks"] = [c.check_id for c in e.report.blockers()]
-        record["breaches"] = []
+        # A rejection means a calculator ran and a model failed to relay it faithfully.
+        # The two halves of that are recorded separately: the ledger comparisons still
+        # gate the run (a calculator regression must fail regardless of memo quality),
+        # and the blocker evidence goes into the report so a rejection is diagnosable
+        # instead of being a bare list of check ids.
+        record["breaches"] = (
+            check_ledger(e.ledger, doc["expect"].get("ledger_checks", []))
+            if e.ledger is not None
+            else ["memo rejected and no ledger carried; ledger checks did not run"]
+        )
+        record["evidence"] = [
+            f"{c.check_id}: {c.details}" + (f" | {'; '.join(c.evidence)}" if c.evidence else "")
+            for c in e.report.blockers()
+        ]
+        if e.memo is not None and e.ledger is not None:
+            valid_ids = sorted(entry.entry_id for entry in e.ledger.entries)
+            record["traced"] = [
+                f"{n.label}: value={n.value} source_id={n.source_id!r}"
+                for n in e.memo.all_traced_numbers()
+            ]
+            record["ledger_ids"] = valid_ids
     except Exception as e:  # infrastructure failure, not a memo judgment
         record["approved"] = False
         record["failed_checks"] = [f"error: {type(e).__name__}: {e}"]
@@ -113,6 +133,25 @@ def write_report(records: list[dict[str, Any]], out: Path) -> None:
             f"{', '.join(str(c) for c in r['failed_checks']) or '-'} | "
             f"{', '.join(r['breaches']) or '-'} | {r['seconds']} |"
         )
+
+    # Per-case evidence for rejections. The table answers "what failed"; this answers
+    # "why", which is the difference between a diagnosable report and a scoreboard.
+    rejected = [r for r in records if not r["approved"] and r.get("evidence")]
+    if rejected:
+        lines += ["", "## Rejection evidence", ""]
+        for r in rejected:
+            lines.append(f"### {r['name']}")
+            lines.append("")
+            for item in r["evidence"]:
+                lines.append(f"- {item}")
+            if r.get("traced"):
+                lines += ["", "Traced numbers the model emitted:", ""]
+                lines += [f"- {t}" for t in r["traced"]]
+            if r.get("ledger_ids"):
+                lines += ["", "Valid ledger entry ids for this case:", ""]
+                lines += [f"- `{i}`" for i in r["ledger_ids"]]
+            lines.append("")
+
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
 

@@ -438,5 +438,5 @@ def run_analysis(
         )
         report = run_critic(memo, ledger, case, llm_checks=llm_checks)
         if not report.approved:
-            raise MemoRejectedError(report)
+            raise MemoRejectedError(report, memo=memo, ledger=ledger)
     return AnalysisResult(memo, report, ledger)
