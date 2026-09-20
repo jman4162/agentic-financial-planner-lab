@@ -107,9 +107,8 @@ class TestStructuredRetry:
 
 
 class TestStructuredTimeout:
-    def test_a_hung_attempt_is_not_retried(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        """Retrying a hang under pinned sampling asks a deterministic model the same
-        question and waits the same deadline again for the same non-answer."""
+    def test_a_hung_attempt_is_retried(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """A loop in constrained generation is one of the failures a retry recovers."""
         import asyncio
         from typing import Any
 
@@ -125,7 +124,8 @@ class TestStructuredTimeout:
 
             async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
                 self.calls += 1
-                await asyncio.sleep(60)  # simulates a generation loop
+                if self.calls == 1:
+                    await asyncio.sleep(60)  # simulates a generation loop
                 async for event in super().structured_output(
                     output_model, prompt, system_prompt, **kw
                 ):
@@ -133,9 +133,37 @@ class TestStructuredTimeout:
 
         findings = passing_findings()
         model = HangingModel([findings])
-        with pytest.raises(TimeoutError):
+        result = get_structured(model, type(findings), "prompt", "system")
+        assert model.calls == 2
+        assert result == findings
+
+    def test_a_retry_cannot_outlive_the_deadline(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """Two attempts of an open-ended wait is the cost the deadline exists to cap."""
+        import asyncio
+        import time
+        from typing import Any
+
+        from planner_lab.agents.structured import call_deadline, get_structured
+        from tests.support.stub_model import StubModel
+
+        monkeypatch.setenv("PLANNER_LAB_LLM_TIMEOUT", "600")
+
+        class HangingModel(StubModel):
+            def __init__(self, outputs: list[Any]):
+                super().__init__(outputs)
+                self.calls = 0
+
+            async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
+                self.calls += 1
+                await asyncio.sleep(60)
+                yield {}
+
+        findings = passing_findings()
+        model = HangingModel([findings])
+        started = time.monotonic()
+        with call_deadline(0.3), pytest.raises(TimeoutError):
             get_structured(model, type(findings), "prompt", "system")
-        assert model.calls == 1
+        assert time.monotonic() - started < 30
 
     def test_a_deadline_caps_the_per_call_timeout(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         """One unit of work makes several calls, so the per-call timeout is not a

@@ -23,6 +23,7 @@ CI step kills still leaves the cases that did finish.
 
 import argparse
 import datetime
+import logging
 import importlib.metadata
 import os
 import platform
@@ -211,6 +212,10 @@ def main() -> int:
         return 2
 
     build_model()  # fail fast if the provider is unreachable/misconfigured
+    # Per-call timings, so a run that spends 900 seconds somewhere says where. Scoped to
+    # this package: the HTTP and agent libraries below it log far more than this needs.
+    logging.basicConfig(format="  %(message)s")
+    logging.getLogger("planner_lab").setLevel(logging.INFO)
     console = Console()
     records = []
     out = Path(args.out)

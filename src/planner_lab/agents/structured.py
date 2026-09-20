@@ -6,6 +6,7 @@ project are single-turn, and the direct path is simpler to test and stub.
 """
 
 import asyncio
+import logging
 import os
 import time
 from collections.abc import Iterator
@@ -15,6 +16,8 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 from strands.models.model import Model
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -72,16 +75,16 @@ async def _collect(model: Model, output_model: type[T], prompt: str, system_prom
 
 
 def get_structured(model: Model, output_model: type[T], prompt: str, system_prompt: str) -> T:
-    """Run one structured-output call, with a single retry on a malformed response.
+    """Run one structured-output call, with a single retry on any failure.
 
-    Local models occasionally emit malformed JSON or an empty response; that retry is
-    cheap, because the failure arrives as fast as the response did.
+    Local models emit malformed JSON, return nothing, or loop in constrained
+    generation until the timeout; on a slow runner the retry recovers all three often
+    enough to be worth its cost. What the retry must not do is double an open-ended
+    wait, so attempts share the budget set by `call_deadline`: the second attempt gets
+    what the first left, and gets nothing once the budget is gone.
 
-    A call that burns its whole timeout is not retried. Eval runs pin the seed and the
-    temperature, so the second attempt asks a deterministic model the same question and
-    hangs the same way; the retry only spends the deadline twice before raising the
-    error it was always going to raise. Attempts share the budget set by
-    `call_deadline`, so neither failure mode can run past it.
+    Every attempt logs how long it took, because per-call cost is the number that sizes
+    a CI budget and it is invisible from the outside.
     """
 
     async def attempt(timeout: float) -> T:
@@ -92,12 +95,27 @@ def get_structured(model: Model, output_model: type[T], prompt: str, system_prom
     def run_once() -> T:
         timeout = _call_timeout()
         if timeout <= 0:
-            raise TimeoutError("call deadline exhausted before the request was sent")
-        return asyncio.run(attempt(timeout))
+            raise TimeoutError(f"no time left for the {output_model.__name__} call")
+        started = time.monotonic()
+        try:
+            result = asyncio.run(attempt(timeout))
+        except TimeoutError:
+            logger.info(
+                "%s call gave up after %.0fs", output_model.__name__, time.monotonic() - started
+            )
+            raise
+        except Exception as e:
+            logger.info(
+                "%s call failed after %.0fs: %s",
+                output_model.__name__,
+                time.monotonic() - started,
+                e,
+            )
+            raise
+        logger.info("%s call answered in %.0fs", output_model.__name__, time.monotonic() - started)
+        return result
 
     try:
         return run_once()
-    except TimeoutError:
-        raise
     except Exception:
         return run_once()

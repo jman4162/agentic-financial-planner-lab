@@ -80,12 +80,11 @@ jobs:
   golden-evals:
     needs: select-cases
     runs-on: ubuntu-latest
-    # A case costs about 15 minutes with the qwen3 judge on a CPU runner, and about
-    # twice that when the critic rejects the first memo and the writer revises it. The
-    # budgets below are sized from that: LLM calls stop at 40 minutes, the step at 50,
-    # the job at 65. The innermost limit is the one that fires, so a stuck case ends as
-    # a reported failure with a report attached rather than as a killed step.
-    timeout-minutes: 65
+    # Sized from what this runner has actually shown: single calls of 760 and 900+
+    # seconds, and whole cases of 28 to 46 minutes. LLM calls stop at 50 minutes, the
+    # step at 60, the job at 75. The innermost limit is the one that fires, so a stuck
+    # case ends as a reported failure with a report attached rather than a killed step.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -141,7 +140,7 @@ jobs:
           key: ollama-${{ env.EVAL_MODEL }}-${{ env.EVAL_CRITIC_MODEL }}
 
       - name: Run golden eval
-        timeout-minutes: 50
+        timeout-minutes: 60
         env:
           OLLAMA_MODEL: ${{ env.EVAL_MODEL }}
           PLANNER_LAB_CRITIC_MODEL: ${{ env.EVAL_CRITIC_MODEL }}
@@ -154,14 +153,14 @@ jobs:
           # changed rather than the dice. The local experiments pinned the same values.
           PLANNER_LAB_LLM_SEED: "42"
           PLANNER_LAB_LLM_TEMPERATURE: "0"
-          # Per-call ceiling. The default 300s fits the small writer but not the qwen3
-          # critic on a CPU runner, which reads the whole memo before judging; two calls
-          # exceeded it in the sizing run and were miscounted as crashes.
+          # Per-call ceiling, for breaking a call that has stopped making progress.
+          # The default 300s is not it: a memo draft off the small writer has taken 760
+          # seconds here, and the judge reads the whole memo before answering.
           PLANNER_LAB_LLM_TIMEOUT: "900"
-          # Per-case ceiling, shared by every call the case makes. Without it a case
-          # makes up to four calls of PLANNER_LAB_LLM_TIMEOUT each and can outlast any
-          # step budget on its own.
-          EVAL_CASE_BUDGET: "2400"
+          # Per-case ceiling, shared by every call the case makes, retries included.
+          # Without it a case makes up to four calls of PLANNER_LAB_LLM_TIMEOUT, twice
+          # each, and can outlast any step budget on its own.
+          EVAL_CASE_BUDGET: "3000"
         run: |
           uv run python evals/run_evals.py \
             --cases "${{ matrix.case }}" \
