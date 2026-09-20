@@ -22,7 +22,21 @@ def _ollama_options() -> dict[str, Any]:
     return options
 
 
-def build_model(*, model_id: str | None = None) -> Model:
+def _critic_think() -> bool | None:
+    """Whether to ask the critic's model to reason before answering, or None to not ask.
+
+    Unset means the request carries no `think` field at all, which is what every
+    provider understood before this setting existed. Reasoning models are the reason
+    it exists: on a CPU-only runner the critic spends most of its wall clock emitting
+    reasoning tokens nobody reads, for a judgment that is two booleans and a sentence.
+    """
+    raw = os.environ.get("PLANNER_LAB_CRITIC_THINK", "").strip().lower()
+    if not raw:
+        return None
+    return raw in {"1", "true", "yes", "on"}
+
+
+def build_model(*, model_id: str | None = None, think: bool | None = None) -> Model:
     """Build the configured model provider.
 
     Environment:
@@ -35,7 +49,9 @@ def build_model(*, model_id: str | None = None) -> Model:
         PLANNER_LAB_BEDROCK_MODEL: Bedrock model id (provider "bedrock" only)
 
     ``model_id`` overrides the environment's model selection while keeping every other
-    setting; used to build the critic on a different model than the writer.
+    setting; used to build the critic on a different model than the writer. ``think``
+    turns a reasoning model's hidden reasoning on or off (Ollama only); None leaves the
+    field out of the request, which is the provider's own default.
     """
     provider = os.environ.get("PLANNER_LAB_MODEL_PROVIDER", "ollama")
     temperature = os.environ.get("PLANNER_LAB_LLM_TEMPERATURE")
@@ -45,6 +61,10 @@ def build_model(*, model_id: str | None = None) -> Model:
         kwargs: dict[str, Any] = {"options": _ollama_options()}
         if temperature is not None:
             kwargs["temperature"] = float(temperature)
+        if think is not None:
+            # Ollama reads `think` beside `messages`, not inside `options`, and
+            # additional_args is the provider's passthrough for top-level fields.
+            kwargs["additional_args"] = {"think": think}
         return OllamaModel(
             host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
             model_id=model_id or os.environ.get("OLLAMA_MODEL", "qwen3"),
@@ -63,6 +83,7 @@ def build_critic_model() -> Model | None:
 
     Environment:
         PLANNER_LAB_CRITIC_MODEL: model id for the critic (same provider as the writer)
+        PLANNER_LAB_CRITIC_THINK: reasoning on/off for a reasoning critic (Ollama only)
 
     A model reviewing its own prose is a weak judge, and with a small writer it is an
     erratic one: in instrumented eval runs the self-judge flagged a suggested question
@@ -73,4 +94,4 @@ def build_critic_model() -> Model | None:
     critic_id = os.environ.get("PLANNER_LAB_CRITIC_MODEL")
     if not critic_id:
         return None
-    return build_model(model_id=critic_id)
+    return build_model(model_id=critic_id, think=_critic_think())

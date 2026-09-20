@@ -18,40 +18,78 @@ on:
         required: false
         default: ""
 
+env:
+  # A dispatch can override the models for one-off experiments without editing this
+  # file; the nightly schedule always uses the defaults.
+  EVAL_MODEL: ${{ github.event.inputs.model || 'qwen2.5:3b' }}
+  # The critic runs on a stronger model than the writer. A small model judging its
+  # own prose proved erratic (it flagged a required memo section as securities
+  # advice); the critic call is one short judgment per pass, so a larger judge fits
+  # the budget even though a larger writer does not.
+  EVAL_CRITIC_MODEL: ${{ github.event.inputs.critic_model || 'qwen3' }}
+  # Hosted runners are CPU-only, and the full ten-case set costs more runner time than
+  # is worth spending nightly. These four exercise distinct paths: a funded baseline, a
+  # shortfall, guaranteed income near retirement, and a sparse case file. Dispatch the
+  # workflow with cases=all for the whole set.
+  NIGHTLY_CASES: on-track-couple,deficit-household,near-retiree,minimal-edge
+  # This job is a smoke test, not a quality measurement, and the threshold is zero
+  # on purpose.
+  #
+  # The model small enough to run here approves nothing: qwen2.5:3b scored 0/4,
+  # failing numbers_traceable on every case, while the committed baseline in
+  # evals/reports/latest.md scored 7/10 on qwen3. So the approval rate this job
+  # reports says almost nothing about memo quality, and gating on it would only
+  # encode the small model's ceiling.
+  #
+  # What a green run does prove: the pipeline executes end to end against a real
+  # model, and no memo claimed a figure that the ledger cannot account for.
+  # Deterministic ledger breaches fail the run regardless of this setting, as does a
+  # case that crashed or ran out of time. Raise the threshold only alongside a model
+  # that can clear it.
+  EVAL_MIN_APPROVAL: "0"
+
 jobs:
-  golden-evals:
+  # One case per job. Cases were run in a single step until the qwen3 critic tripled
+  # per-case cost on a CPU runner, at which point four cases stopped fitting in any
+  # step budget worth setting: the step was killed mid-run every night, taking the
+  # report with it, and the cases at the end of the alphabet were never evaluated at
+  # all. Sharding pays for that with runner minutes, which this repo has, instead of
+  # with coverage.
+  select-cases:
     runs-on: ubuntu-latest
-    # The qwen3 critic roughly triples per-case time on a CPU runner: about 15 minutes
-    # per case observed, so four cases need ~65 minutes of evals before startup.
-    timeout-minutes: 110
-    env:
-      # A dispatch can override the models for one-off experiments without editing this
-      # file; the nightly schedule always uses the defaults.
-      EVAL_MODEL: ${{ github.event.inputs.model || 'qwen2.5:3b' }}
-      # The critic runs on a stronger model than the writer. A small model judging its
-      # own prose proved erratic (it flagged a required memo section as securities
-      # advice); the critic call is one short judgment per pass, so a larger judge fits
-      # the budget even though a larger writer does not.
-      EVAL_CRITIC_MODEL: ${{ github.event.inputs.critic_model || 'qwen3' }}
-      # Hosted runners are CPU-only, and the full ten-case set does not finish in a
-      # window worth spending nightly. These four exercise distinct paths: a funded
-      # baseline, a shortfall, guaranteed income near retirement, and a sparse case
-      # file. Dispatch the workflow with cases=all for the whole set.
-      NIGHTLY_CASES: on-track-couple,deficit-household,near-retiree,minimal-edge
-      # This job is a smoke test, not a quality measurement, and the threshold is zero
-      # on purpose.
-      #
-      # The model small enough to run here approves nothing: qwen2.5:3b scored 0/4,
-      # failing numbers_traceable on every case, while the committed baseline in
-      # evals/reports/latest.md scored 7/10 on qwen3. So the approval rate this job
-      # reports says almost nothing about memo quality, and gating on it would only
-      # encode the small model's ceiling.
-      #
-      # What a green run does prove: the pipeline executes end to end against a real
-      # model, and no memo claimed a figure that the ledger cannot account for.
-      # Deterministic ledger breaches fail the run regardless of this setting. Raise
-      # the threshold only alongside a model that can clear it.
-      EVAL_MIN_APPROVAL: "0"
+    outputs:
+      cases: ${{ steps.pick.outputs.cases }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: pick
+        env:
+          CASES_INPUT: ${{ github.event.inputs.cases }}
+        run: |
+          if [ "$CASES_INPUT" = "all" ]; then
+            names=$(basename -s .yaml evals/golden/*.yaml)
+          elif [ -n "$CASES_INPUT" ]; then
+            names=$(echo "$CASES_INPUT" | tr ',' ' ')
+          else
+            names=$(echo "$NIGHTLY_CASES" | tr ',' ' ')
+          fi
+          echo "selected: $names"
+          # shellcheck disable=SC2086
+          echo "cases=$(printf '%s\n' $names | jq -Rsc 'split("\n") | map(select(. != ""))')" \
+            >> "$GITHUB_OUTPUT"
+
+  golden-evals:
+    needs: select-cases
+    runs-on: ubuntu-latest
+    # A case costs about 15 minutes with the qwen3 judge on a CPU runner, and about
+    # twice that when the critic rejects the first memo and the writer revises it. The
+    # budgets below are sized from that: LLM calls stop at 40 minutes, the step at 50,
+    # the job at 65. The innermost limit is the one that fires, so a stuck case ends as
+    # a reported failure with a report attached rather than as a killed step.
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(needs.select-cases.outputs.cases) }}
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v8.3.2
@@ -92,43 +130,65 @@ jobs:
 
       # Saved here rather than in a post step, so a slow or failing eval run cannot cost
       # the cache. The previous layout only saved on success, and since the job never
-      # succeeded the model was re-pulled every night.
+      # succeeded the model was re-pulled every night. Shards race for the same key on a
+      # cold cache; the losers report a collision and are not a run failure.
       - name: Save model cache
         if: steps.model-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: ~/.ollama/models
           key: ollama-${{ env.EVAL_MODEL }}-${{ env.EVAL_CRITIC_MODEL }}
 
-      - name: Run golden evals
-        timeout-minutes: 90
+      - name: Run golden eval
+        timeout-minutes: 50
         env:
           OLLAMA_MODEL: ${{ env.EVAL_MODEL }}
           PLANNER_LAB_CRITIC_MODEL: ${{ env.EVAL_CRITIC_MODEL }}
+          # qwen3 reasons before it answers, and on a CPU runner that reasoning is most
+          # of the critic's wall clock: minutes of hidden tokens for a judgment that is
+          # two booleans and a sentence. Off here only. The committed quality baseline
+          # is a local run, which does not read this variable and is unaffected.
+          PLANNER_LAB_CRITIC_THINK: "off"
           # Deterministic sampling, so a score change between nights means the code
           # changed rather than the dice. The local experiments pinned the same values.
           PLANNER_LAB_LLM_SEED: "42"
           PLANNER_LAB_LLM_TEMPERATURE: "0"
-          # Per-call timeout. The default 300s fits the small writer but not the qwen3
+          # Per-call ceiling. The default 300s fits the small writer but not the qwen3
           # critic on a CPU runner, which reads the whole memo before judging; two calls
           # exceeded it in the sizing run and were miscounted as crashes.
           PLANNER_LAB_LLM_TIMEOUT: "900"
-          CASES_INPUT: ${{ github.event.inputs.cases }}
+          # Per-case ceiling, shared by every call the case makes. Without it a case
+          # makes up to four calls of PLANNER_LAB_LLM_TIMEOUT each and can outlast any
+          # step budget on its own.
+          EVAL_CASE_BUDGET: "2400"
         run: |
-          if [ "$CASES_INPUT" = "all" ]; then
-            selected=""
-            echo "running the full golden set"
-          elif [ -n "$CASES_INPUT" ]; then
-            selected="$CASES_INPUT"
-            echo "running requested cases: $selected"
-          else
-            selected="$NIGHTLY_CASES"
-            echo "running the nightly subset: $selected"
-          fi
-          uv run python evals/run_evals.py --cases "$selected" --out evals/reports/ci-latest.md
+          uv run python evals/run_evals.py \
+            --cases "${{ matrix.case }}" \
+            --out "evals/reports/ci-${{ matrix.case }}.md"
 
       - name: Publish report to job summary
         if: always()
+        run: cat "evals/reports/ci-${{ matrix.case }}.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ matrix.case }}
+          path: evals/reports/ci-${{ matrix.case }}.md
+
+  report:
+    needs: golden-evals
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: eval-report-*
+          merge-multiple: true
+          path: reports
+      - name: Publish the combined report
         run: |
           {
             echo "> **The approval rate below is not a quality measurement.** This job runs"
@@ -140,11 +200,13 @@ jobs:
             echo "> their evidence in the report below."
             echo
           } >> "$GITHUB_STEP_SUMMARY"
-          cat evals/reports/ci-latest.md >> "$GITHUB_STEP_SUMMARY" || true
-
-      - name: Upload report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
+          if ls reports/*.md >/dev/null 2>&1; then
+            cat reports/*.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No case produced a report." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('reports/*.md') != ''
         with:
           name: eval-report
-          path: evals/reports/ci-latest.md
+          path: reports

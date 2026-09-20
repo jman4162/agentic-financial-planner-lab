@@ -127,6 +127,8 @@ Full walkthroughs with real generated memos, checked in verbatim:
 
 The committed baseline is the quality number: 7/10 on `qwen3` writing and judging. A nightly GitHub Actions job runs a four-case subset with `qwen2.5:3b` writing and `qwen3` judging (the writer must fit a CPU-only runner; the critic renders one short judgment per pass, so a stronger judge fits the budget), with pinned sampling so a score change between nights means the code changed. Rejections carry their evidence in the report, and the deterministic ledger comparisons run whether or not the memo was approved. The nightly and local scores are comparable in aggregate but not case by case: identical seeds sample differently across CPU backends.
 
+Each nightly case runs in its own job, and `EVAL_CASE_BUDGET` caps the seconds of model time one case may spend. A CPU runner takes roughly fifteen minutes per case and about twice that when the critic rejects the first memo, which is more than a single job should hold for four cases. The judge also runs with its reasoning turned off in CI (`PLANNER_LAB_CRITIC_THINK=off`), where reasoning tokens cost minutes per judgment; the committed baseline is a local run and leaves that setting alone.
+
 ## Configuration
 
 Runtime configuration is environment-based: model provider, research server, and tracing are selected with environment variables. Modeling defaults (assumption sets, simulation seeds, stress durations) are code with documented rationale; override assumptions per case in the case file.

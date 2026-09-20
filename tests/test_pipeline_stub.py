@@ -107,7 +107,9 @@ class TestStructuredRetry:
 
 
 class TestStructuredTimeout:
-    def test_hung_first_attempt_times_out_and_retries(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def test_a_hung_attempt_is_not_retried(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """Retrying a hang under pinned sampling asks a deterministic model the same
+        question and waits the same deadline again for the same non-answer."""
         import asyncio
         from typing import Any
 
@@ -123,8 +125,7 @@ class TestStructuredTimeout:
 
             async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
                 self.calls += 1
-                if self.calls == 1:
-                    await asyncio.sleep(60)  # simulates a generation loop
+                await asyncio.sleep(60)  # simulates a generation loop
                 async for event in super().structured_output(
                     output_model, prompt, system_prompt, **kw
                 ):
@@ -132,7 +133,84 @@ class TestStructuredTimeout:
 
         findings = passing_findings()
         model = HangingModel([findings])
-        result = get_structured(model, type(findings), "prompt", "system")
+        with pytest.raises(TimeoutError):
+            get_structured(model, type(findings), "prompt", "system")
+        assert model.calls == 1
+
+    def test_a_deadline_caps_the_per_call_timeout(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """One unit of work makes several calls, so the per-call timeout is not a
+        budget. A caller that has one bounds the calls with it."""
+        import asyncio
+        import time
+
+        from planner_lab.agents.structured import call_deadline, get_structured
+        from tests.support.stub_model import StubModel
+
+        monkeypatch.setenv("PLANNER_LAB_LLM_TIMEOUT", "600")
+
+        class HangingModel(StubModel):
+            async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
+                await asyncio.sleep(60)
+                async for event in super().structured_output(
+                    output_model, prompt, system_prompt, **kw
+                ):
+                    yield event
+
+        findings = passing_findings()
+        started = time.monotonic()
+        with call_deadline(0.3), pytest.raises(TimeoutError):
+            get_structured(HangingModel([findings]), type(findings), "prompt", "system")
+        assert time.monotonic() - started < 30
+
+    def test_an_exhausted_deadline_stops_the_next_call_before_it_is_sent(self) -> None:
+        from typing import Any
+
+        from planner_lab.agents.structured import call_deadline, get_structured
+        from tests.support.stub_model import StubModel
+
+        class CountingModel(StubModel):
+            def __init__(self, outputs: list[Any]):
+                super().__init__(outputs)
+                self.calls = 0
+
+            async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
+                self.calls += 1
+                async for event in super().structured_output(
+                    output_model, prompt, system_prompt, **kw
+                ):
+                    yield event
+
+        findings = passing_findings()
+        model = CountingModel([findings])
+        with call_deadline(-1), pytest.raises(TimeoutError):
+            get_structured(model, type(findings), "prompt", "system")
+        assert model.calls == 0
+
+    def test_a_malformed_response_still_retries_inside_the_deadline(self) -> None:
+        from typing import Any
+
+        from planner_lab.agents.structured import call_deadline, get_structured
+        from tests.support.stub_model import StubModel
+
+        class FlakyModel(StubModel):
+            def __init__(self, outputs: list[Any]):
+                super().__init__(outputs)
+                self.calls = 0
+
+            async def structured_output(self, output_model, prompt, system_prompt=None, **kw):  # type: ignore[no-untyped-def]
+                self.calls += 1
+                if self.calls == 1:
+                    yield {"progress": "no output key on first attempt"}
+                    return
+                async for event in super().structured_output(
+                    output_model, prompt, system_prompt, **kw
+                ):
+                    yield event
+
+        findings = passing_findings()
+        model = FlakyModel([findings])
+        with call_deadline(30):
+            result = get_structured(model, type(findings), "prompt", "system")
         assert model.calls == 2
         assert result == findings
 

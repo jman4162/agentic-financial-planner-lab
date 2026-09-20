@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("strands")
 
-from planner_lab.agents.models import DEFAULT_NUM_CTX, build_model
+from planner_lab.agents.models import DEFAULT_NUM_CTX, build_critic_model, build_model
 
 
 def _ollama_config(model):  # type: ignore[no-untyped-def]
@@ -44,3 +44,36 @@ def test_seed_and_temperature_plumb_through(monkeypatch: pytest.MonkeyPatch) -> 
     config = _ollama_config(build_model())
     assert config["options"]["seed"] == 42
     assert config["temperature"] == 0.0
+
+
+def test_critic_thinking_is_left_to_the_provider_unless_asked_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PLANNER_LAB_CRITIC_MODEL", "qwen3")
+    monkeypatch.delenv("PLANNER_LAB_CRITIC_THINK", raising=False)
+    critic = build_critic_model()
+    assert critic is not None
+    assert "additional_args" not in _ollama_config(critic)
+
+
+def test_critic_thinking_can_be_turned_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reasoning critic spends most of a CPU run emitting reasoning nobody reads."""
+    monkeypatch.setenv("PLANNER_LAB_CRITIC_MODEL", "qwen3")
+    monkeypatch.setenv("PLANNER_LAB_CRITIC_THINK", "off")
+    critic = build_critic_model()
+    assert critic is not None
+    assert _ollama_config(critic)["additional_args"] == {"think": False}
+
+
+def test_critic_thinking_can_be_turned_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLANNER_LAB_CRITIC_MODEL", "qwen3")
+    monkeypatch.setenv("PLANNER_LAB_CRITIC_THINK", "on")
+    critic = build_critic_model()
+    assert critic is not None
+    assert _ollama_config(critic)["additional_args"] == {"think": True}
+
+
+def test_the_writer_never_carries_a_thinking_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The setting names the critic, and a model that cannot reason rejects the field."""
+    monkeypatch.setenv("PLANNER_LAB_CRITIC_THINK", "off")
+    assert "additional_args" not in _ollama_config(build_model())

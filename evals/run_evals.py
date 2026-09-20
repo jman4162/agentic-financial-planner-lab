@@ -6,12 +6,19 @@ Usage:
 Environment:
     OLLAMA_MODEL / PLANNER_LAB_MODEL_PROVIDER select the model (same as the CLI).
     EVAL_MIN_APPROVAL (default 0.0): exit nonzero when the approval rate is lower.
+    EVAL_CASE_BUDGET (unset = no limit): seconds of LLM time one case may spend
+        before its calls start failing, so a hung model costs one case instead of
+        the whole run. Size it under whatever kills the process.
 
 Two failure classes are distinguished deliberately:
 - Deterministic invariant breaches (a recorded ledger value differs from the
   golden expectation) are code regressions and always fail the run.
 - Critic rejections are the system refusing to emit an unverifiable memo; they
   lower the approval rate but only fail the run below EVAL_MIN_APPROVAL.
+
+A third class, a case that crashed or ran out of time, proves nothing either way
+and always fails the run. The report is rewritten after every case, so a run the
+CI step kills still leaves the cases that did finish.
 """
 
 import argparse
@@ -21,6 +28,7 @@ import os
 import platform
 import sys
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -31,10 +39,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from planner_lab.agents.models import build_model  # noqa: E402
 from planner_lab.agents.pipeline import run_analysis  # noqa: E402
+from planner_lab.agents.structured import call_deadline  # noqa: E402
 from planner_lab.memo.render import MemoRejectedError  # noqa: E402
 from planner_lab.schemas.case_file import CaseFile  # noqa: E402
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
+
+
+def case_budget() -> float | None:
+    raw = os.environ.get("EVAL_CASE_BUDGET", "").strip()
+    return float(raw) if raw else None
 
 
 def check_ledger(ledger: Any, checks: list[dict[str, Any]]) -> list[str]:
@@ -64,13 +78,16 @@ def run_case(path: Path) -> dict[str, Any]:
     case = CaseFile.model_validate(doc["case"])
     started = time.monotonic()
     record: dict[str, Any] = {"name": doc["name"], "simulate": doc.get("simulate", False)}
+    budget = case_budget()
+    deadline = call_deadline(budget) if budget is not None else nullcontext()
     try:
-        result = run_analysis(
-            case,
-            simulate=doc.get("simulate", False),
-            confirm=lambda _: True,
-            console=Console(quiet=True),
-        )
+        with deadline:
+            result = run_analysis(
+                case,
+                simulate=doc.get("simulate", False),
+                confirm=lambda _: True,
+                console=Console(quiet=True),
+            )
         record["approved"] = True
         record["failed_checks"] = [c.check_id for c in result.report.checks if not c.passed]
         record["breaches"] = check_ledger(result.ledger, doc["expect"].get("ledger_checks", []))
@@ -98,10 +115,22 @@ def run_case(path: Path) -> dict[str, Any]:
                 for n in e.memo.all_traced_numbers()
             ]
             record["ledger_ids"] = valid_ids
+    except TimeoutError as e:
+        # Distinct from a crash: the pipeline was working, it just did not finish inside
+        # the time it had. Recorded as its own class rather than as a ledger breach,
+        # because nothing was measured against the golden values to breach.
+        limit = f"{budget:.0f}s case budget" if budget is not None else "per-call timeout"
+        record["approved"] = False
+        # asyncio raises this one with an empty message, and which limit fired is the
+        # first thing the next reader needs.
+        record["error"] = f"out of time, {limit}: {str(e) or 'a model call never answered'}"
+        record["failed_checks"] = [record["error"]]
+        record["breaches"] = []
     except Exception as e:  # infrastructure failure, not a memo judgment
         record["approved"] = False
-        record["failed_checks"] = [f"error: {type(e).__name__}: {e}"]
-        record["breaches"] = [f"run crashed: {e}"]
+        record["error"] = f"{type(e).__name__}: {e}"
+        record["failed_checks"] = [f"error: {record['error']}"]
+        record["breaches"] = []
     record["seconds"] = round(time.monotonic() - started, 1)
     return record
 
@@ -111,6 +140,7 @@ def write_report(records: list[dict[str, Any]], out: Path) -> None:
     provider = os.environ.get("PLANNER_LAB_MODEL_PROVIDER", "ollama")
     critic = os.environ.get("PLANNER_LAB_CRITIC_MODEL")
     approved = sum(1 for r in records if r["approved"])
+    errored = [r for r in records if r.get("error")]
     lines = [
         "# Eval report",
         "",
@@ -125,6 +155,14 @@ def write_report(records: list[dict[str, Any]], out: Path) -> None:
         "which is the designed failure mode; the score measures how often the",
         "model produces a memo that survives every deterministic check.",
         "",
+    ]
+    if errored:
+        lines += [
+            f"{len(errored)} case(s) produced no judgment at all (crash or time limit);",
+            "those are counted against the approval rate but measure nothing.",
+            "",
+        ]
+    lines += [
         "| Case | Simulate | Approved | Failed checks | Ledger breaches | Seconds |",
         "|---|---|---|---|---|---|",
     ]
@@ -175,19 +213,30 @@ def main() -> int:
     build_model()  # fail fast if the provider is unreachable/misconfigured
     console = Console()
     records = []
+    out = Path(args.out)
     for path in paths:
         console.print(f"[cyan]eval[/cyan] {path.stem} ...")
         record = run_case(path)
-        status = "[green]approved[/green]" if record["approved"] else "[red]rejected[/red]"
+        if record.get("error"):
+            status = "[red]did not finish[/red]"
+        else:
+            status = "[green]approved[/green]" if record["approved"] else "[red]rejected[/red]"
         console.print(f"  {status} in {record['seconds']}s")
         records.append(record)
-
-    write_report(records, Path(args.out))
-    console.print(f"report written to {args.out}")
+        # Rewritten after every case rather than once at the end: a long run is the one
+        # most likely to be killed by a CI step limit, and that is exactly the run whose
+        # partial results are worth having.
+        write_report(records, out)
+    console.print(f"report written to {out}")
 
     breaches = [b for r in records for b in r["breaches"]]
     if breaches:
         console.print(f"[red]{len(breaches)} deterministic breach(es); failing.[/red]")
+        return 1
+    errored = [r for r in records if r.get("error")]
+    if errored:
+        names = ", ".join(str(r["name"]) for r in errored)
+        console.print(f"[red]{len(errored)} case(s) produced no judgment: {names}[/red]")
         return 1
     approval = sum(1 for r in records if r["approved"]) / len(records)
     minimum = float(os.environ.get("EVAL_MIN_APPROVAL", "0"))
