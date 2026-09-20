@@ -155,6 +155,12 @@ jobs:
           # changed rather than the dice. The local experiments pinned the same values.
           PLANNER_LAB_LLM_SEED: "42"
           PLANNER_LAB_LLM_TEMPERATURE: "0"
+          # Greedy sampling is also what makes the small writer repeat itself until the
+          # clock runs out: minimal-edge spent 3000 seconds on two attempts at one draft
+          # and near-retiree spent its whole budget, while deficit-household answered the
+          # same pinned prompt in 782. 4096 tokens is several times any draft the writer
+          # legitimately produces, so it ends the loops and nothing else.
+          PLANNER_LAB_OLLAMA_NUM_PREDICT: "4096"
           # Per-call ceiling, for breaking a call that has stopped making progress.
           # It has to clear the slowest healthy call by a margin or it just fails good
           # work: at 900s it sat on top of the writer's own cost, and deficit-household

@@ -19,6 +19,14 @@ def _ollama_options() -> dict[str, Any]:
     seed = os.environ.get("PLANNER_LAB_LLM_SEED")
     if seed is not None:
         options["seed"] = int(seed)
+    # Greedy decoding under a JSON schema is a repetition trap for a small model: the
+    # grammar keeps a repeated phrase valid inside a string field, so nothing makes it
+    # stop, and the request runs until something kills it. A cap turns that into a
+    # truncated response, which fails in seconds and leaves the retry its budget. Set
+    # it above any draft the writer legitimately produces; unset means no cap.
+    num_predict = os.environ.get("PLANNER_LAB_OLLAMA_NUM_PREDICT")
+    if num_predict is not None:
+        options["num_predict"] = int(num_predict)
     return options
 
 
@@ -44,6 +52,7 @@ def build_model(*, model_id: str | None = None, think: bool | None = None) -> Mo
         OLLAMA_HOST: Ollama server URL (default http://localhost:11434)
         OLLAMA_MODEL: model id (default qwen3; needs reliable tool calling)
         PLANNER_LAB_OLLAMA_NUM_CTX: context window (default 8192)
+        PLANNER_LAB_OLLAMA_NUM_PREDICT: cap on generated tokens (unset = uncapped)
         PLANNER_LAB_LLM_TEMPERATURE: sampling temperature (unset = provider default)
         PLANNER_LAB_LLM_SEED: sampling seed, for reproducible eval runs (Ollama only)
         PLANNER_LAB_BEDROCK_MODEL: Bedrock model id (provider "bedrock" only)
