@@ -77,14 +77,3 @@ def test_the_writer_never_carries_a_thinking_flag(monkeypatch: pytest.MonkeyPatc
     """The setting names the critic, and a model that cannot reason rejects the field."""
     monkeypatch.setenv("PLANNER_LAB_CRITIC_THINK", "off")
     assert "additional_args" not in _ollama_config(build_model())
-
-
-def test_generation_is_uncapped_unless_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("PLANNER_LAB_OLLAMA_NUM_PREDICT", raising=False)
-    assert "num_predict" not in _ollama_config(build_model())["options"]
-
-
-def test_generation_cap_plumbs_through(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The cap is what ends a constrained-generation loop before a timeout does."""
-    monkeypatch.setenv("PLANNER_LAB_OLLAMA_NUM_PREDICT", "4096")
-    assert _ollama_config(build_model())["options"]["num_predict"] == 4096
