@@ -41,9 +41,12 @@ jobs:
       # install script used to fetch the latest release every night, and 0.32.10 turned
       # the default repeat penalty off: every run from Aug 14 timed out on writer calls
       # looping inside a JSON string, with no change in this repo. The code now sets the
-      # penalty itself; the pin keeps the next default change from landing unannounced.
-      # Try an upgrade with a dispatch (ollama_version) before moving the pin.
-      EVAL_OLLAMA_VERSION: ${{ github.event.inputs.ollama_version || '0.40.6' }}
+      # penalty itself, which brought three of the four cases back on 0.40.6, but
+      # minimal-edge still timed out on its first draft there, alone or after other cases,
+      # while a direct replay of the same prompt on the same runner finished in 334s.
+      # 0.32.9 is the last release this job has passed on. Try an upgrade with a dispatch
+      # (ollama_version) before moving the pin.
+      EVAL_OLLAMA_VERSION: ${{ github.event.inputs.ollama_version || '0.32.9' }}
       # Hosted runners are CPU-only, and the full ten-case set does not finish in a
       # window worth spending nightly. These four exercise distinct paths: a funded
       # baseline, a shortfall, guaranteed income near retirement, and a sparse case
