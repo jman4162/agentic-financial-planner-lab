@@ -1,0 +1,48 @@
+# Temporary diagnostic for the minimal-edge writer timeout; removed before merge.
+name: diag-probe
+on:
+  push:
+    branches: [fix/ollama-repeat-penalty]
+    paths: [.github/workflows/diag-probe.yml, evals/diag/**]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: penalty-1.1-last-64
+            opts: '{"repeat_penalty": 1.1}'
+          - name: penalty-1.1-last-512
+            opts: '{"repeat_penalty": 1.1, "repeat_last_n": 512}'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --all-extras
+      - run: |
+          curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.40.6 sh
+          sudo systemctl stop ollama
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-qwen2.5:3b-qwen3
+      - run: |
+          ollama serve > ollama.log 2>&1 &
+          for _ in $(seq 1 60); do curl -sf http://localhost:11434/api/tags >/dev/null && break; sleep 2; done
+          ollama pull qwen2.5:3b
+      - name: Probe writer prompt
+        timeout-minutes: 35
+        env:
+          EXTRA_OPTS: ${{ matrix.opts }}
+        run: uv run python evals/diag/probe.py "$PWD" minimal-edge out 10000
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-${{ matrix.name }}
+          path: |
+            out/
+            ollama.log
