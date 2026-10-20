@@ -11,10 +11,21 @@ from strands.models.model import Model
 #: is required to copy source ids from. 8,192 fits every current prompt with headroom.
 DEFAULT_NUM_CTX = 8192
 
+#: Ollama 0.32.10 dropped its default repeat penalty from 1.1 to 1.0 (off) for models that
+#: do not set one, qwen2.5 among them. Under greedy decoding the small writer then repeats
+#: one sentence inside a JSON string field until the call times out; the schema grammar
+#: keeps every repetition valid, and Ollama shifts context past num_ctx instead of
+#: stopping. Every nightly eval from that release on timed out this way. 1.1 restores the
+#: earlier server default.
+DEFAULT_REPEAT_PENALTY = 1.1
+
 
 def _ollama_options() -> dict[str, Any]:
     options: dict[str, Any] = {
-        "num_ctx": int(os.environ.get("PLANNER_LAB_OLLAMA_NUM_CTX", DEFAULT_NUM_CTX))
+        "num_ctx": int(os.environ.get("PLANNER_LAB_OLLAMA_NUM_CTX", DEFAULT_NUM_CTX)),
+        "repeat_penalty": float(
+            os.environ.get("PLANNER_LAB_OLLAMA_REPEAT_PENALTY", DEFAULT_REPEAT_PENALTY)
+        ),
     }
     seed = os.environ.get("PLANNER_LAB_LLM_SEED")
     if seed is not None:
@@ -30,6 +41,7 @@ def build_model(*, model_id: str | None = None) -> Model:
         OLLAMA_HOST: Ollama server URL (default http://localhost:11434)
         OLLAMA_MODEL: model id (default qwen3; needs reliable tool calling)
         PLANNER_LAB_OLLAMA_NUM_CTX: context window (default 8192)
+        PLANNER_LAB_OLLAMA_REPEAT_PENALTY: repeat penalty (default 1.1; 1.0 disables it)
         PLANNER_LAB_LLM_TEMPERATURE: sampling temperature (unset = provider default)
         PLANNER_LAB_LLM_SEED: sampling seed, for reproducible eval runs (Ollama only)
         PLANNER_LAB_BEDROCK_MODEL: Bedrock model id (provider "bedrock" only)

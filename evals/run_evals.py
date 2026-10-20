@@ -17,10 +17,12 @@ Two failure classes are distinguished deliberately:
 import argparse
 import datetime
 import importlib.metadata
+import json
 import os
 import platform
 import sys
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -106,7 +108,27 @@ def run_case(path: Path) -> dict[str, Any]:
     return record
 
 
-def write_report(records: list[dict[str, Any]], out: Path) -> None:
+def ollama_version() -> str | None:
+    """The serving Ollama's version, or None when it cannot be read.
+
+    Recorded because a server upgrade can change decoding with no change in this repo:
+    0.32.10 turned the default repeat penalty off, and the nightly job timed out from
+    then on.
+    """
+    if os.environ.get("PLANNER_LAB_MODEL_PROVIDER", "ollama") != "ollama":
+        return None
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    try:
+        with urllib.request.urlopen(f"{host}/api/version", timeout=5) as resp:
+            version = json.load(resp).get("version")
+    except (OSError, ValueError):
+        return None
+    return str(version) if version else None
+
+
+def write_report(
+    records: list[dict[str, Any]], out: Path, server_version: str | None = None
+) -> None:
     model = os.environ.get("OLLAMA_MODEL", "qwen3")
     provider = os.environ.get("PLANNER_LAB_MODEL_PROVIDER", "ollama")
     critic = os.environ.get("PLANNER_LAB_CRITIC_MODEL")
@@ -117,6 +139,7 @@ def write_report(records: list[dict[str, Any]], out: Path) -> None:
         f"- Date: {datetime.date.today().isoformat()}",
         f"- Model: {provider}:{model}",
         f"- Critic model: {provider}:{critic}" if critic else "- Critic model: same as writer",
+        f"- Ollama server: {server_version or 'unknown'}",
         f"- planner-lab: {importlib.metadata.version('planner-lab')}",
         f"- Python: {platform.python_version()}",
         f"- Approval rate: {approved}/{len(records)}",
@@ -173,6 +196,7 @@ def main() -> int:
         return 2
 
     build_model()  # fail fast if the provider is unreachable/misconfigured
+    server_version = ollama_version()
     console = Console()
     records = []
     for path in paths:
@@ -181,8 +205,10 @@ def main() -> int:
         status = "[green]approved[/green]" if record["approved"] else "[red]rejected[/red]"
         console.print(f"  {status} in {record['seconds']}s")
         records.append(record)
+        # Rewritten after every case, so a run killed by a CI timeout still leaves the
+        # cases it finished.
+        write_report(records, Path(args.out), server_version)
 
-    write_report(records, Path(args.out))
     console.print(f"report written to {args.out}")
 
     breaches = [b for r in records for b in r["breaches"]]
